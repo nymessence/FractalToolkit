@@ -1,0 +1,38 @@
+We will make  rust fractal tool utility (cli)
+
+We start with 2 executables 
+
+ftk-julia
+ftk-mandel
+
+Example command:
+
+ftk-mandel --bounds [-2.0,2.0,-2.0,2.0] --max-iterations 64 \ 
+--dimensions [512,512] --spawn [0.0,0.0] --color-palette \
+[(#FF0000,0.0),(#00FF00,0.5),(#0000FF,1.0)] \
+--formula "z^2 + c" --bailout 4.0 --output "mandel_($DATE).png"
+
+
+Note --spawn is normally mutated with julia sets but can be done
+with mandelbrot sets too
+
+All git commits: Nymessence <nymessence@gmail.com>
+
+Test math first to ensure coerect complex math before compiling and
+rendering. Also generate an html file alongside the png. Its 
+purpose will be to allow the user to draw a box over the image
+and then it will output an updated command to help a user frame a
+render. 
+
+git commit frequently.
+
+Also there will be some radio buttons to snap the box on the html
+for aspect ratios like 1:1, 3:2, 2:3, 4:3, 3:2, 16:9, and 9:16
+
+This could be usefulfor anything from making website graphics to 
+making art prints
+
+web selector will also suggest various resultions as well then 
+give the command to generate a new render
+
+make sure to extensivley test and document everything.

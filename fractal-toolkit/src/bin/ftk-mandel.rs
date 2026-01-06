@@ -1,9 +1,6 @@
 use clap::Parser;
-use fractal_toolkit::{FractalParams, mandelbrot_iterations, pixel_to_complex, ColorPoint, generate_html_file};
-use num_complex::Complex;
+use fractal_toolkit::{FractalParams, mandelbrot_iterations, pixel_to_complex, generate_html_file};
 use image::{ImageBuffer, Rgba};
-use std::fs::File;
-use std::io::Write;
 
 #[derive(Parser)]
 #[command(name = "ftk-mandel")]
@@ -55,7 +52,7 @@ fn main() {
     println!("  Bailout: {}", args.bailout);
     println!("  Output: {}", args.output);
 
-    if let Some(palette) = args.color_pallette {
+    if let Some(ref palette) = args.color_pallette {
         println!("  Color palette: {}", palette);
     }
 
@@ -65,13 +62,18 @@ fn main() {
         std::process::exit(1);
     }
 
+    let width = args.dimensions[0];
+    let height = args.dimensions[1];
+
+    if width == 0 || height == 0 {
+        eprintln!("Error: dimensions must be greater than 0");
+        std::process::exit(1);
+    }
+
     if args.bounds.len() != 4 {
         eprintln!("Error: bounds must have exactly 4 values [x_min, x_max, y_min, y_max]");
         std::process::exit(1);
     }
-
-    let width = args.dimensions[0];
-    let height = args.dimensions[1];
     let bounds = [args.bounds[0], args.bounds[1], args.bounds[2], args.bounds[3]];
 
     // Create fractal parameters
@@ -92,14 +94,26 @@ fn main() {
     println!("Mandelbrot image saved to {}", args.output);
 
     // Generate command template for the HTML
-    let command_template = format!(
-        "ftk-mandel --bounds {{bounds}} --dimensions {{dimensions}} --max-iterations {} --spawn {},{} --bailout {} --formula \"{}\" --output \"mandel_zoom_$(date +%Y%m%d_%H%M%S).png\"",
-        args.max_iterations,
-        args.spawn[0],
-        args.spawn[1],
-        args.bailout,
-        args.formula.clone()
-    );
+    let command_template = if let Some(ref palette) = args.color_pallette {
+        format!(
+            "ftk-mandel --bounds {{bounds}} --dimensions {{dimensions}} --max-iterations {} --spawn {},{} --color-pallette \"{}\" --bailout {} --formula \"{}\" --output \"mandel_zoom_$(date +%Y%m%d_%H%M%S).png\"",
+            args.max_iterations,
+            args.spawn[0],
+            args.spawn[1],
+            palette,
+            args.bailout,
+            args.formula.clone()
+        )
+    } else {
+        format!(
+            "ftk-mandel --bounds {{bounds}} --dimensions {{dimensions}} --max-iterations {} --spawn {},{} --bailout {} --formula \"{}\" --output \"mandel_zoom_$(date +%Y%m%d_%H%M%S).png\"",
+            args.max_iterations,
+            args.spawn[0],
+            args.spawn[1],
+            args.bailout,
+            args.formula.clone()
+        )
+    };
 
     // Generate the HTML file
     if let Err(e) = generate_html_file(&args.output, bounds, [width, height], &command_template) {

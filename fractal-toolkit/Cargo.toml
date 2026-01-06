@@ -11,9 +11,20 @@ path = "src/bin/ftk-mandel.rs"
 name = "ftk-julia"
 path = "src/bin/ftk-julia.rs"
 
+[[bin]]
+name = "ftk-buddha"
+path = "src/bin/ftk-buddha.rs"
+
+[[bin]]
+name = "ftk-buddhaj"
+path = "src/bin/ftk-buddhaj.rs"
+
 [dependencies]
 clap = { version = "4.0", features = ["derive"] }
 image = "0.24"
-num-complex = "0.4"
+num-complex = { version = "0.4", features = ["serde"] }
+rand = "0.8"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
+num = "0.4"
+special = "0.12"
