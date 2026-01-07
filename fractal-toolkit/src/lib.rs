@@ -22,6 +22,10 @@
 use num_complex::Complex;
 use rand::{Rng, SeedableRng};
 use serde::{Deserialize, Serialize};
+use std::f64::consts::PI;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Arc;
+use chrono::{DateTime, Local, Duration};
 
 /// Mathematical expression evaluator for complex numbers with support for various functions
 #[derive(Debug, Clone)]
@@ -885,6 +889,14 @@ pub struct BuddhabrotJuliaParams {
     pub channels: BuddhabrotChannels, // RGB channel configurations
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DomainColorParams {
+    pub bounds: [f64; 4],  // [x_min, x_max, y_min, y_max]
+    pub width: u32,
+    pub height: u32,
+    pub formula: String,
+}
+
 impl BuddhabrotJuliaParams {
     pub fn new(
         bounds: [f64; 4],
@@ -935,6 +947,12 @@ pub fn generate_html_file(
     dimensions: [u32; 2],
     command_template: &str,
 ) -> std::io::Result<()> {
+    // Extract just the filename from the image path for use in the HTML
+    let image_filename = std::path::Path::new(image_path)
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or(image_path);
+
     let html_content = format!(
         r#"<!DOCTYPE html>
 <html>
@@ -1022,10 +1040,19 @@ pub fn generate_html_file(
                     <option value="640x480">640x480</option>
                     <option value="800x600">800x600</option>
                     <option value="1024x768">1024x768</option>
-                    <option value="1280x720" selected>1280x720</option>
+                    <option value="1280x720">1280x720</option>
                     <option value="1920x1080">1920x1080</option>
                     <option value="2560x1440">2560x1440</option>
-                    <option value="3840x2160">3840x2160</option>
+                    <option value="3840x2160">3840x2160 (4K)</option>
+                    <option value="5760x3240">5760x3240 (6K)</option>
+                    <option value="7680x4320">7680x4320 (8K)</option>
+                    <option value="11520x6480">11520x6480 (12K)</option>
+                    <option value="15360x8640">15360x8640 (16K)</option>
+                    <option value="23040x12960">23040x12960 (24K)</option>
+                    <option value="30720x17280">30720x17280 (32K)</option>
+                    <option value="46080x25920">46080x25920 (48K)</option>
+                    <option value="61440x34560">61440x34560 (64K)</option>
+                    <option value="72000x40500">72000x40500 (72K)</option>
                 </select>
             </div>
 
@@ -1060,6 +1087,11 @@ pub fn generate_html_file(
         document.addEventListener('mousemove', updateSelection);
         document.addEventListener('mouseup', endSelection);
 
+        // Prevent default context menu on the image
+        img.addEventListener('contextmenu', function(e) {{
+            e.preventDefault();
+        }});
+
         // Initialize resolution options based on default aspect ratio
         updateResolutionOptions();
 
@@ -1086,11 +1118,56 @@ pub fn generate_html_file(
             currentX = e.clientX - rect.left;
             currentY = e.clientY - rect.top;
 
-            const width = Math.abs(currentX - startX);
-            const height = Math.abs(currentY - startY);
+            // Get selected aspect ratio
+            const selectedRatio = document.querySelector('input[name="aspect-ratio"]:checked').value;
+            const [ratioX, ratioY] = selectedRatio.split(':').map(Number);
+            const aspectRatio = ratioX / ratioY;
 
-            const left = Math.min(startX, currentX);
-            const top = Math.min(startY, currentY);
+            // Calculate width and height of the drag
+            let dragWidth = currentX - startX;
+            let dragHeight = currentY - startY;
+
+            // Apply aspect ratio constraint while preserving drag direction
+            if (aspectRatio > 0) {{
+                // Calculate both possible constrained dimensions
+                let constrainedHeight = dragWidth / aspectRatio;
+                let constrainedWidth = dragHeight * aspectRatio;
+
+                // Choose the constraint that results in a larger area (preserving the intended drag)
+                if (Math.abs(dragWidth * dragHeight) <= Math.abs(dragWidth * constrainedHeight)) {{
+                    dragHeight = constrainedHeight;
+                }} else {{
+                    dragWidth = constrainedWidth;
+                }}
+            }}
+
+            // Position the selection box based on start position and constrained dimensions
+            let left, top, width, height;
+            if (dragWidth >= 0 && dragHeight >= 0) {{
+                // Dragging down-right
+                left = startX;
+                top = startY;
+                width = dragWidth;
+                height = dragHeight;
+            }} else if (dragWidth >= 0 && dragHeight < 0) {{
+                // Dragging up-right
+                left = startX;
+                top = startY + dragHeight;
+                width = dragWidth;
+                height = -dragHeight;
+            }} else if (dragWidth < 0 && dragHeight >= 0) {{
+                // Dragging down-left
+                left = startX + dragWidth;
+                top = startY;
+                width = -dragWidth;
+                height = dragHeight;
+            }} else {{
+                // Dragging up-left
+                left = startX + dragWidth;
+                top = startY + dragHeight;
+                width = -dragWidth;
+                height = -dragHeight;
+            }}
 
             selectionBox.style.left = left + 'px';
             selectionBox.style.top = top + 'px';
@@ -1102,29 +1179,105 @@ pub fn generate_html_file(
             if (!isSelecting) return;
             isSelecting = false;
 
-            // Calculate the selected region in complex plane coordinates
-            const selectedXMin = bounds[0] + (startX / imgWidth) * (bounds[1] - bounds[0]);
-            const selectedXMax = bounds[0] + (currentX / imgWidth) * (bounds[1] - bounds[0]);
-            const selectedYMin = bounds[2] + (startY / imgHeight) * (bounds[3] - bounds[2]);
-            const selectedYMax = bounds[2] + (currentY / imgHeight) * (bounds[3] - bounds[2]);
-
-            // Ensure correct order
-            const xMin = Math.min(selectedXMin, selectedXMax);
-            const xMax = Math.max(selectedXMin, selectedXMax);
-            const yMin = Math.min(selectedYMin, selectedYMax);
-            const yMax = Math.max(selectedYMin, selectedYMax);
-
             // Get selected aspect ratio
             const selectedRatio = document.querySelector('input[name="aspect-ratio"]:checked').value;
             const [ratioX, ratioY] = selectedRatio.split(':').map(Number);
+            const aspectRatio = ratioX / ratioY;
+
+            // Calculate the drag dimensions (same logic as in updateSelection for consistency)
+            let dragWidth = currentX - startX;
+            let dragHeight = currentY - startY;
+
+            // Apply aspect ratio constraint (same logic as in updateSelection)
+            if (aspectRatio > 0) {{
+                let constrainedHeight = dragWidth / aspectRatio;
+                let constrainedWidth = dragHeight * aspectRatio;
+
+                // Choose the constraint that results in a larger area (preserving the intended drag)
+                if (Math.abs(dragWidth * dragHeight) <= Math.abs(dragWidth * constrainedHeight)) {{
+                    dragHeight = constrainedHeight;
+                }} else {{
+                    dragWidth = constrainedWidth;
+                }}
+            }}
+
+            // Calculate final position and dimensions (same logic as in updateSelection)
+            let left, top, width, height;
+            if (dragWidth >= 0 && dragHeight >= 0) {{
+                // Dragging down-right
+                left = startX;
+                top = startY;
+                width = dragWidth;
+                height = dragHeight;
+            }} else if (dragWidth >= 0 && dragHeight < 0) {{
+                // Dragging up-right
+                left = startX;
+                top = startY + dragHeight;
+                width = dragWidth;
+                height = -dragHeight;
+            }} else if (dragWidth < 0 && dragHeight >= 0) {{
+                // Dragging down-left
+                left = startX + dragWidth;
+                top = startY;
+                width = -dragWidth;
+                height = dragHeight;
+            }} else {{
+                // Dragging up-left
+                left = startX + dragWidth;
+                top = startY + dragHeight;
+                width = -dragWidth;
+                height = -dragHeight;
+            }}
+
+            // Update the selection box to reflect the final constrained dimensions
+            selectionBox.style.left = left + 'px';
+            selectionBox.style.top = top + 'px';
+            selectionBox.style.width = width + 'px';
+            selectionBox.style.height = height + 'px';
+
+            // Calculate the selected region in complex plane coordinates using the final constrained box
+            // Convert pixel coordinates to complex plane coordinates
+            // X coordinate transformation (left to right, same direction in both systems)
+            let selectedXMin = bounds[0] + (left / imgWidth) * (bounds[1] - bounds[0]);
+            let selectedXMax = bounds[0] + ((left + width) / imgWidth) * (bounds[1] - bounds[0]);
+
+            // Y coordinate transformation - account for potential vertical flip
+            // If the image is rendered flipped vertically, then the y-coordinates are already inverted
+            // So HTML y=0 (top) corresponds to complex y=-2 (bottom) and HTML y=imgHeight (bottom) corresponds to complex y=2 (top)
+            let selectedYMin = bounds[2] + (top / imgHeight) * (bounds[3] - bounds[2]);           // HTML top -> complex bottom
+            let selectedYMax = bounds[2] + ((top + height) / imgHeight) * (bounds[3] - bounds[2]); // HTML bottom -> complex top
+
+            // Ensure correct order
+            let xMin = Math.min(selectedXMin, selectedXMax);
+            let xMax = Math.max(selectedXMin, selectedXMax);
+            let yMin = Math.min(selectedYMin, selectedYMax);
+            let yMax = Math.max(selectedYMin, selectedYMax);
+
+            // If bounds are too similar (almost identical), create a reasonable area around the point
+            // Use a more reasonable epsilon based on the current bounds
+            const rangeX = bounds[1] - bounds[0];
+            const rangeY = bounds[3] - bounds[2];
+            const epsilonX = rangeX * 0.001; // 0.1% of the current view width
+            const epsilonY = rangeY * 0.001; // 0.1% of the current view height
+
+            if (Math.abs(xMax - xMin) < epsilonX) {{
+                const center = (xMin + xMax) / 2;
+                xMin = center - epsilonX / 2;
+                xMax = center + epsilonX / 2;
+            }}
+            if (Math.abs(yMax - yMin) < epsilonY) {{
+                const center = (yMin + yMax) / 2;
+                yMin = center - epsilonY / 2;
+                yMax = center + epsilonY / 2;
+            }}
 
             // Get selected resolution
             const resolutionSelect = document.getElementById('resolution-select');
-            const [width, height] = resolutionSelect.value.split('x').map(Number);
+            const [widthRes, heightRes] = resolutionSelect.value.split('x').map(Number);
 
             // Generate the command
-            const command = `{}`.replace('{{bounds}}', `[${{xMin}}, ${{xMax}}, ${{yMin}}, ${{yMax}}]`)
-                                    .replace('{{dimensions}}', `[${{width}}, ${{height}}]`);
+            const command = `{}`.replace('{{bounds}}', `${{xMin}},${{xMax}},${{yMin}},${{yMax}}`)
+                                    .replace('{{dimensions}}', `${{widthRes}},${{heightRes}}`);
 
             document.getElementById('command-output').textContent = command;
         }}
@@ -1166,7 +1319,7 @@ pub fn generate_html_file(
     </script>
 </body>
 </html>"#,
-        image_path,
+        image_filename,
         command_template,
         dimensions[0],
         dimensions[1],
@@ -1269,13 +1422,24 @@ pub fn buddhabrot_channel(
     channel_params: &BuddhabrotChannel,
     _escape_count: u32,
 ) -> Vec<Vec<f64>> {
+    use std::time::{Duration, Instant};
+    use chrono::{Local, Duration as ChronoDuration};
+
     let mut histogram = vec![vec![0.0; params.width as usize]; params.height as usize];
     let [x_min, x_max, y_min, y_max] = params.bounds;
 
     // Generate random samples
     let mut rng = rand::rngs::StdRng::seed_from_u64(42); // Fixed seed for reproducibility
 
-    for _ in 0..channel_params.samples {
+    let total_samples = channel_params.samples;
+    let start_time = Instant::now();
+    let mut last_report_time = Instant::now();
+    let report_interval = Duration::from_secs(10); // Report every 10 seconds
+
+    // Print initial progress
+    println!("Generating Buddhabrot channel: 0% (0/{}) - Started at {:?}", total_samples, Local::now().format("%H:%M:%S"));
+
+    for sample_num in 0..total_samples {
         // Randomly sample a c value in the complex plane
         let c_re = x_min + (x_max - x_min) * rng.gen::<f64>();
         let c_im = y_min + (y_max - y_min) * rng.gen::<f64>();
@@ -1312,7 +1476,40 @@ pub fn buddhabrot_channel(
             }
             iter += 1;
         }
+
+        // Time-based progress reporting every 10 seconds
+        if last_report_time.elapsed() >= report_interval {
+            let elapsed = start_time.elapsed();
+            let percentage = ((sample_num + 1) as f64 / total_samples as f64 * 100.0).round();
+
+            if sample_num > 0 {
+                let rate = (sample_num + 1) as f64 / elapsed.as_secs_f64(); // samples per second
+                let remaining_samples = (total_samples - (sample_num + 1)) as f64;
+                let estimated_remaining_time = remaining_samples / rate; // seconds
+
+                let eta = Local::now() + ChronoDuration::seconds(estimated_remaining_time as i64);
+
+                println!(
+                    "Generating Buddhabrot channel: {:.1}% ({}/{}), Elapsed: {:.1}s, ETA: {} (~{:.1}s remaining)",
+                    percentage,
+                    sample_num + 1,
+                    total_samples,
+                    elapsed.as_secs_f64(),
+                    eta.format("%H:%M:%S"),
+                    estimated_remaining_time
+                );
+            }
+
+            last_report_time = Instant::now();
+        }
     }
+
+    // Final progress report
+    let elapsed = start_time.elapsed();
+    println!(
+        "Generating Buddhabrot channel: 100% ({}/{}), Completed in {:.1}s",
+        total_samples, total_samples, elapsed.as_secs_f64()
+    );
 
     histogram
 }
@@ -1390,13 +1587,24 @@ pub fn buddhabrot_julia_channel(
     params: &BuddhabrotJuliaParams,
     channel_params: &BuddhabrotChannel,
 ) -> Vec<Vec<f64>> {
+    use std::time::{Duration, Instant};
+    use chrono::{Local, Duration as ChronoDuration};
+
     let mut histogram = vec![vec![0.0; params.width as usize]; params.height as usize];
     let [x_min, x_max, y_min, y_max] = params.bounds;
 
     // Generate random samples
     let mut rng = rand::rngs::StdRng::seed_from_u64(42); // Fixed seed for reproducibility
 
-    for _ in 0..channel_params.samples {
+    let total_samples = channel_params.samples;
+    let start_time = Instant::now();
+    let mut last_report_time = Instant::now();
+    let report_interval = Duration::from_secs(10); // Report every 10 seconds
+
+    // Print initial progress
+    println!("Generating Buddhabrot Julia channel: 0% (0/{}) - Started at {:?}", total_samples, Local::now().format("%H:%M:%S"));
+
+    for sample_num in 0..total_samples {
         // Randomly sample a z0 value in the complex plane
         let z_re = x_min + (x_max - x_min) * rng.gen::<f64>();
         let z_im = y_min + (y_max - y_min) * rng.gen::<f64>();
@@ -1432,7 +1640,40 @@ pub fn buddhabrot_julia_channel(
             }
             iter += 1;
         }
+
+        // Time-based progress reporting every 10 seconds
+        if last_report_time.elapsed() >= report_interval {
+            let elapsed = start_time.elapsed();
+            let percentage = ((sample_num + 1) as f64 / total_samples as f64 * 100.0).round();
+
+            if sample_num > 0 {
+                let rate = (sample_num + 1) as f64 / elapsed.as_secs_f64(); // samples per second
+                let remaining_samples = (total_samples - (sample_num + 1)) as f64;
+                let estimated_remaining_time = remaining_samples / rate; // seconds
+
+                let eta = Local::now() + ChronoDuration::seconds(estimated_remaining_time as i64);
+
+                println!(
+                    "Generating Buddhabrot Julia channel: {:.1}% ({}/{}), Elapsed: {:.1}s, ETA: {} (~{:.1}s remaining)",
+                    percentage,
+                    sample_num + 1,
+                    total_samples,
+                    elapsed.as_secs_f64(),
+                    eta.format("%H:%M:%S"),
+                    estimated_remaining_time
+                );
+            }
+
+            last_report_time = Instant::now();
+        }
     }
+
+    // Final progress report
+    let elapsed = start_time.elapsed();
+    println!(
+        "Generating Buddhabrot Julia channel: 100% ({}/{}), Completed in {:.1}s",
+        total_samples, total_samples, elapsed.as_secs_f64()
+    );
 
     histogram
 }
@@ -1527,6 +1768,121 @@ pub fn pixel_to_complex(x: u32, y: u32, width: u32, height: u32, bounds: [f64; 4
     Complex::new(real, imag)
 }
 
+/// Generate a domain color plot for a complex function
+///
+/// This function creates a visualization of a complex function using domain coloring,
+/// where each point in the complex plane is assigned a color based on the value of
+/// the function at that point. The hue represents the argument (angle) of the complex
+/// value, and the lightness represents the magnitude.
+///
+/// # Arguments
+///
+/// * `params` - Domain color parameters including bounds, dimensions, and formula
+///
+/// # Returns
+///
+/// An RGB image representing the domain coloring of the complex function
+pub fn generate_domain_color_plot(params: &DomainColorParams) -> image::RgbImage {
+    let mut img = image::RgbImage::new(params.width, params.height);
+    let [_x_min, _x_max, _y_min, _y_max] = params.bounds; // Keep for documentation purposes
+
+    for y in 0..params.height {
+        for x in 0..params.width {
+            // Convert pixel coordinates to complex plane coordinates
+            let z = pixel_to_complex(x, y, params.width, params.height, params.bounds);
+
+            // Evaluate the complex function
+            let result = match evaluate_complex_function(&params.formula, z) {
+                Ok(value) => value,
+                Err(_) => Complex::new(0.0, 0.0), // Default to zero if evaluation fails
+            };
+
+            // Calculate hue based on argument (angle) of the result
+            let arg = result.arg(); // Returns angle in radians from -π to π
+            let hue = (arg + PI) / (2.0 * PI); // Normalize to 0-1 range
+
+            // Calculate brightness based on magnitude of the result
+            let mag = result.norm(); // Magnitude of the complex number
+            // Use logarithmic scaling to handle large ranges of magnitudes
+            let brightness = if mag > 0.0 {
+                let log_mag = mag.ln();
+                // Map log magnitude to 0-1 range, with adjustable scaling
+                let scaled = (log_mag + 10.0) / 20.0; // Adjust range as needed
+                scaled.clamp(0.0, 1.0)
+            } else {
+                0.0
+            };
+
+            // Convert HSV to RGB
+            let rgb = hsv_to_rgb(hue, 1.0, brightness);
+
+            img.put_pixel(x, y, image::Rgb(rgb));
+        }
+    }
+
+    img
+}
+
+/// Evaluate a complex function given as a string
+///
+/// This is a sophisticated evaluator that handles complex mathematical expressions
+///
+/// # Arguments
+///
+/// * `formula` - String representation of the complex function (e.g., "z^2", "sin(z)", etc.)
+/// * `z` - Input complex number
+///
+/// # Returns
+///
+/// The result of evaluating the function at z, or an error if the formula is invalid
+fn evaluate_complex_function(formula: &str, z: Complex<f64>) -> Result<Complex<f64>, String> {
+    // Use the existing sophisticated parser
+    let formula = formula.trim();
+
+    // For fractal generation, 'c' typically represents the point in the complex plane
+    // For Mandelbrot: z^2 + c where c is the coordinate
+    // For Julia: z^2 + c where c is a fixed constant
+    let param = z; // For Mandelbrot, param is the coordinate; for Julia, it would be fixed
+
+    // Use the existing expression parser
+    MathEvaluator::parse_and_evaluate(formula, z, param)
+}
+
+/// Convert HSV color values to RGB
+///
+/// # Arguments
+///
+/// * `h` - Hue (0.0 to 1.0)
+/// * `s` - Saturation (0.0 to 1.0)
+/// * `v` - Value/Brightness (0.0 to 1.0)
+///
+/// # Returns
+///
+/// RGB values as [u8, u8, u8] array
+fn hsv_to_rgb(h: f64, s: f64, v: f64) -> [u8; 3] {
+    let h = h.fract(); // Ensure hue is in [0, 1) range
+    let h_i = (h * 6.0).floor() as i32;
+    let f = h * 6.0 - h_i as f64;
+    let p = v * (1.0 - s);
+    let q = v * (1.0 - f * s);
+    let t = v * (1.0 - (1.0 - f) * s);
+
+    let (r, g, b) = match h_i % 6 {
+        0 => (v, t, p),
+        1 => (q, v, p),
+        2 => (p, v, t),
+        3 => (p, q, v),
+        4 => (t, p, v),
+        _ => (v, p, q),
+    };
+
+    [
+        (r * 255.0).round() as u8,
+        (g * 255.0).round() as u8,
+        (b * 255.0).round() as u8,
+    ]
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1586,4 +1942,225 @@ mod tests {
         let z = Complex::new(3.0, 4.0);
         assert_eq!(z.norm_sqr(), 25.0);  // 3^2 + 4^2 = 25
     }
+}
+
+#[derive(Debug, Clone)]
+pub struct ColorStop {
+    pub color: [u8; 3],  // RGB
+    pub position: f64,   // 0.0 to 1.0
+}
+
+// Parse color palette string like "[(#FF0000,0.0),(#00FF00,0.5),(#0000FF,1.0)]"
+pub fn parse_color_palette(palette_str: &str) -> Result<Vec<ColorStop>, String> {
+    let mut stops = Vec::new();
+
+    // Remove outer brackets if present
+    let clean = palette_str.trim().trim_start_matches('[').trim_end_matches(']');
+
+    // Split by "),(" to get individual color stops
+    let color_stops: Vec<&str> = clean.split("),(").collect();
+
+    for stop_str in color_stops {
+        let clean_stop = stop_str.trim().trim_start_matches('(').trim_end_matches(')');
+        let parts: Vec<&str> = clean_stop.split(',').collect();
+
+        if parts.len() != 2 {
+            return Err(format!("Invalid color stop format: {}", clean_stop));
+        }
+
+        let hex_color = parts[0].trim().trim_start_matches('"').trim_end_matches('"');
+        let position_str = parts[1].trim();
+
+        // Parse hex color
+        let color = parse_hex_color(hex_color)?;
+
+        // Parse position
+        let position = position_str.parse::<f64>().map_err(|_| format!("Invalid position: {}", position_str))?;
+
+        stops.push(ColorStop { color, position });
+    }
+
+    // Sort by position
+    stops.sort_by(|a, b| a.position.partial_cmp(&b.position).unwrap());
+
+    Ok(stops)
+}
+
+// Parse hex color like "#FF0000" to [R, G, B]
+pub fn parse_hex_color(hex: &str) -> Result<[u8; 3], String> {
+    let hex_clean = hex.trim_start_matches('#');
+
+    if hex_clean.len() != 6 {
+        return Err(format!("Invalid hex color length: {}", hex));
+    }
+
+    let r = u8::from_str_radix(&hex_clean[0..2], 16).map_err(|_| format!("Invalid hex color: {}", hex))?;
+    let g = u8::from_str_radix(&hex_clean[2..4], 16).map_err(|_| format!("Invalid hex color: {}", hex))?;
+    let b = u8::from_str_radix(&hex_clean[4..6], 16).map_err(|_| format!("Invalid hex color: {}", hex))?;
+
+    Ok([r, g, b])
+}
+
+// Interpolate color from palette based on normalized value (0.0 to 1.0)
+pub fn interpolate_color_from_palette(normalized_value: f64, palette: &[ColorStop]) -> image::Rgba<u8> {
+    if palette.is_empty() {
+        return image::Rgba([0, 0, 0, 255]); // Default to black
+    }
+
+    if palette.len() == 1 {
+        return image::Rgba([palette[0].color[0], palette[0].color[1], palette[0].color[2], 255]);
+    }
+
+    // Find the two color stops to interpolate between
+    let mut lower_idx = 0;
+    let mut upper_idx = palette.len() - 1;
+
+    for i in 0..palette.len() {
+        if palette[i].position <= normalized_value {
+            lower_idx = i;
+        } else {
+            upper_idx = i;
+            break;
+        }
+    }
+
+    // Clamp to valid indices
+    if upper_idx <= lower_idx {
+        upper_idx = lower_idx + 1;
+        if upper_idx >= palette.len() {
+            upper_idx = palette.len() - 1;
+        }
+    }
+
+    if lower_idx == upper_idx {
+        return image::Rgba([palette[lower_idx].color[0], palette[lower_idx].color[1], palette[lower_idx].color[2], 255]);
+    }
+
+    let lower = &palette[lower_idx];
+    let upper = &palette[upper_idx];
+
+    // Interpolate between the two colors
+    let t = (normalized_value - lower.position) / (upper.position - lower.position);
+    let t = t.clamp(0.0, 1.0);
+
+    let r = (lower.color[0] as f64 * (1.0 - t) + upper.color[0] as f64 * t).round() as u8;
+    let g = (lower.color[1] as f64 * (1.0 - t) + upper.color[1] as f64 * t).round() as u8;
+    let b = (lower.color[2] as f64 * (1.0 - t) + upper.color[2] as f64 * t).round() as u8;
+
+    image::Rgba([r, g, b, 255])
+}
+
+// Function to convert iterations to a color using the palette
+pub fn color_from_iterations_with_palette(iterations: u32, max_iterations: u32, palette: &[ColorStop]) -> image::Rgba<u8> {
+    if max_iterations == 0 {
+        return image::Rgba([0, 0, 0, 255]);
+    }
+
+    if iterations == max_iterations {
+        // Inside the set - typically black, but could be customized
+        // For now, use the first color in the palette or black
+        if !palette.is_empty() {
+            image::Rgba([palette[0].color[0], palette[0].color[1], palette[0].color[2], 255])
+        } else {
+            image::Rgba([0, 0, 0, 255])
+        }
+    } else {
+        // Outside the set - interpolate based on iteration count
+        let t = iterations as f64 / max_iterations as f64;
+        interpolate_color_from_palette(t, palette)
+    }
+}
+
+// Simple function to convert iterations to a color (fallback)
+pub fn color_from_iterations(iterations: u32, max_iterations: u32) -> image::Rgba<u8> {
+    if iterations == max_iterations {
+        // Inside the set - black
+        image::Rgba([0, 0, 0, 255])
+    } else {
+        // Outside the set - color based on iterations
+        let t = iterations as f64 / max_iterations as f64;
+        let r = (9.0 * (1.0 - t) * t * t * t * 255.0) as u8;
+        let g = (15.0 * (1.0 - t) * (1.0 - t) * t * t * 255.0) as u8;
+        let b = (8.5 * (1.0 - t) * (1.0 - t) * (1.0 - t) * t * 255.0) as u8;
+        image::Rgba([r, g, b, 255])
+    }
+}
+
+// Generate fractal image with time-based progress bar and ETA with color palette support
+pub fn generate_fractal_image<F>(
+    width: u32,
+    height: u32,
+    params: &FractalParams,
+    iteration_func: F,
+    color_palette: Option<&Vec<ColorStop>>,
+) -> image::ImageBuffer<image::Rgba<u8>, Vec<u8>>
+where
+    F: Fn(Complex<f64>, &FractalParams) -> u32,
+{
+    use std::time::{Duration, Instant};
+
+    let mut imgbuf = image::ImageBuffer::new(width, height);
+
+    // Initialize progress tracking
+    let total_pixels = width * height;
+    let processed_pixels = Arc::new(AtomicUsize::new(0));
+    let start_time = Instant::now();
+
+    // Print initial progress
+    println!("Rendering fractal: 0% (0/{}) - Started at {:?}", total_pixels, chrono::Local::now().format("%H:%M:%S"));
+
+    let mut last_report_time = Instant::now();
+    let report_interval = Duration::from_secs(10); // Report every 10 seconds
+
+    for (x, y, pixel) in imgbuf.enumerate_pixels_mut() {
+        let c = pixel_to_complex(x, y, width, height, params.bounds);
+        let iterations = iteration_func(c, params);
+
+        // Choose coloring method based on whether palette is provided
+        let color = if let Some(palette) = color_palette {
+            color_from_iterations_with_palette(iterations, params.max_iterations, palette)
+        } else {
+            color_from_iterations(iterations, params.max_iterations)
+        };
+
+        *pixel = color;
+
+        // Update progress counter
+        let current = processed_pixels.fetch_add(1, Ordering::SeqCst) + 1;
+
+        // Time-based progress reporting every 10 seconds
+        if last_report_time.elapsed() >= report_interval {
+            let elapsed = start_time.elapsed();
+            let percentage = (current as f64 / total_pixels as f64 * 100.0).round();
+
+            if current > 0 {
+                let rate = current as f64 / elapsed.as_secs_f64(); // pixels per second
+                let remaining_pixels = (total_pixels as usize - current) as f64;
+                let estimated_remaining_time = remaining_pixels / rate; // seconds
+
+                let eta = chrono::Local::now() + chrono::Duration::seconds(estimated_remaining_time as i64);
+
+                println!(
+                    "Rendering fractal: {:.1}% ({}/{}), Elapsed: {:.1}s, ETA: {} (~{:.1}s remaining)",
+                    percentage,
+                    current,
+                    total_pixels,
+                    elapsed.as_secs_f64(),
+                    eta.format("%H:%M:%S"),
+                    estimated_remaining_time
+                );
+            }
+
+            last_report_time = Instant::now();
+        }
+    }
+
+    // Final progress report
+    let elapsed = start_time.elapsed();
+    println!(
+        "Rendering fractal: 100% ({}/{}), Completed in {:.1}s",
+        total_pixels, total_pixels, elapsed.as_secs_f64()
+    );
+
+    imgbuf
 }

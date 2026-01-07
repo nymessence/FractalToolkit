@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Fractal Explorer</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f0f0f0;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .image-container {
+            position: relative;
+            display: inline-block;
+            margin-bottom: 20px;
+        }
+        #fractal-image {
+            max-width: 100%;
+            height: auto;
+            border: 1px solid #ccc;
+        }
+        #selection-box {
+            position: absolute;
+            border: 2px dashed red;
+            background: rgba(255, 0, 0, 0.2);
+            pointer-events: none;
+            display: none;
+        }
+        .controls {
+            margin-top: 20px;
+        }
+        .aspect-ratio-controls {
+            margin-bottom: 15px;
+        }
+        .aspect-ratio-controls label {
+            margin-right: 10px;
+            display: inline-block;
+        }
+        .resolution-controls {
+            margin-bottom: 15px;
+        }
+        .resolution-controls select {
+            padding: 5px;
+            margin-left: 10px;
+        }
+        .command-output {
+            background: #fff;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-family: monospace;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Fractal Explorer</h1>
+        <p>Click and drag on the image to select a region. The command to render that region will appear below.</p>
+
+        <div class="image-container">
+            <img id="fractal-image" src="test_julia_eta.png" alt="Fractal Image">
+            <div id="selection-box"></div>
+        </div>
+
+        <div class="controls">
+            <div class="aspect-ratio-controls">
+                <label><input type="radio" name="aspect-ratio" value="1:1" checked> 1:1 (Square)</label>
+                <label><input type="radio" name="aspect-ratio" value="3:2"> 3:2</label>
+                <label><input type="radio" name="aspect-ratio" value="2:3"> 2:3</label>
+                <label><input type="radio" name="aspect-ratio" value="4:3"> 4:3</label>
+                <label><input type="radio" name="aspect-ratio" value="3:4"> 3:4</label>
+                <label><input type="radio" name="aspect-ratio" value="16:9"> 16:9</label>
+                <label><input type="radio" name="aspect-ratio" value="9:16"> 9:16</label>
+            </div>
+
+            <div class="resolution-controls">
+                <label>Resolution:</label>
+                <select id="resolution-select">
+                    <option value="640x480">640x480</option>
+                    <option value="800x600">800x600</option>
+                    <option value="1024x768">1024x768</option>
+                    <option value="1280x720">1280x720</option>
+                    <option value="1920x1080">1920x1080</option>
+                    <option value="2560x1440">2560x1440</option>
+                    <option value="3840x2160">3840x2160 (4K)</option>
+                    <option value="5760x3240">5760x3240 (6K)</option>
+                    <option value="7680x4320">7680x4320 (8K)</option>
+                    <option value="11520x6480">11520x6480 (12K)</option>
+                    <option value="15360x8640">15360x8640 (16K)</option>
+                    <option value="23040x12960">23040x12960 (24K)</option>
+                    <option value="30720x17280">30720x17280 (32K)</option>
+                    <option value="46080x25920">46080x25920 (48K)</option>
+                    <option value="61440x34560">61440x34560 (64K)</option>
+                    <option value="72000x40500">72000x40500 (72K)</option>
+                </select>
+            </div>
+
+            <h3>Command to render selected region:</h3>
+            <div id="command-output" class="command-output">ftk-julia --bounds={bounds} --dimensions={dimensions} --max-iterations=256 --spawn=-0.7,0.27015 --bailout=4 --formula="z^3 + c" --output="julia_zoom_$(date +%Y%m%d_%H%M%S).png"</div>
+        </div>
+    </div>
+
+    <script>
+        const img = document.getElementById('fractal-image');
+        const selectionBox = document.getElementById('selection-box');
+        let isSelecting = false;
+        let startX, startY, currentX, currentY;
+
+        // Get image dimensions
+        const imgWidth = 512;
+        const imgHeight = 512;
+        const bounds = [-1.5, 1.5, -1.5, 1.5]; // [x_min, x_max, y_min, y_max]
+
+        // Define common resolutions for each aspect ratio
+        const aspectRatioResolutions = {
+            "1:1": ["512x512", "1024x1024", "2048x2048"],
+            "3:2": ["750x500", "1500x1000", "3000x2000"],
+            "2:3": ["500x750", "1000x1500", "2000x3000"],
+            "4:3": ["640x480", "1024x768", "2048x1536"],
+            "3:4": ["480x640", "768x1024", "1536x2048"],
+            "16:9": ["1280x720", "1920x1080", "3840x2160"],
+            "9:16": ["720x1280", "1080x1920", "2160x3840"]
+        };
+
+        img.addEventListener('mousedown', startSelection);
+        document.addEventListener('mousemove', updateSelection);
+        document.addEventListener('mouseup', endSelection);
+
+        // Prevent default context menu on the image
+        img.addEventListener('contextmenu', function(e) {
+            e.preventDefault();
+        });
+
+        // Initialize resolution options based on default aspect ratio
+        updateResolutionOptions();
+
+        function startSelection(e) {
+            isSelecting = true;
+
+            // Get the position of the image relative to the viewport
+            const rect = img.getBoundingClientRect();
+
+            startX = e.clientX - rect.left;
+            startY = e.clientY - rect.top;
+
+            selectionBox.style.left = startX + 'px';
+            selectionBox.style.top = startY + 'px';
+            selectionBox.style.width = '0px';
+            selectionBox.style.height = '0px';
+            selectionBox.style.display = 'block';
+        }
+
+        function updateSelection(e) {
+            if (!isSelecting) return;
+
+            const rect = img.getBoundingClientRect();
+            currentX = e.clientX - rect.left;
+            currentY = e.clientY - rect.top;
+
+            // Get selected aspect ratio
+            const selectedRatio = document.querySelector('input[name="aspect-ratio"]:checked').value;
+            const [ratioX, ratioY] = selectedRatio.split(':').map(Number);
+            const aspectRatio = ratioX / ratioY;
+
+            // Calculate width and height of the drag
+            let dragWidth = currentX - startX;
+            let dragHeight = currentY - startY;
+
+            // Apply aspect ratio constraint while preserving drag direction
+            if (aspectRatio > 0) {
+                // Calculate both possible constrained dimensions
+                let constrainedHeight = dragWidth / aspectRatio;
+                let constrainedWidth = dragHeight * aspectRatio;
+
+                // Choose the constraint that results in a larger area (preserving the intended drag)
+                if (Math.abs(dragWidth * dragHeight) <= Math.abs(dragWidth * constrainedHeight)) {
+                    dragHeight = constrainedHeight;
+                } else {
+                    dragWidth = constrainedWidth;
+                }
+            }
+
+            // Position the selection box based on start position and constrained dimensions
+            let left, top, width, height;
+            if (dragWidth >= 0 && dragHeight >= 0) {
+                // Dragging down-right
+                left = startX;
+                top = startY;
+                width = dragWidth;
+                height = dragHeight;
+            } else if (dragWidth >= 0 && dragHeight < 0) {
+                // Dragging up-right
+                left = startX;
+                top = startY + dragHeight;
+                width = dragWidth;
+                height = -dragHeight;
+            } else if (dragWidth < 0 && dragHeight >= 0) {
+                // Dragging down-left
+                left = startX + dragWidth;
+                top = startY;
+                width = -dragWidth;
+                height = dragHeight;
+            } else {
+                // Dragging up-left
+                left = startX + dragWidth;
+                top = startY + dragHeight;
+                width = -dragWidth;
+                height = -dragHeight;
+            }
+
+            selectionBox.style.left = left + 'px';
+            selectionBox.style.top = top + 'px';
+            selectionBox.style.width = width + 'px';
+            selectionBox.style.height = height + 'px';
+        }
+
+        function endSelection() {
+            if (!isSelecting) return;
+            isSelecting = false;
+
+            // Get selected aspect ratio
+            const selectedRatio = document.querySelector('input[name="aspect-ratio"]:checked').value;
+            const [ratioX, ratioY] = selectedRatio.split(':').map(Number);
+            const aspectRatio = ratioX / ratioY;
+
+            // Calculate the drag dimensions (same logic as in updateSelection for consistency)
+            let dragWidth = currentX - startX;
+            let dragHeight = currentY - startY;
+
+            // Apply aspect ratio constraint (same logic as in updateSelection)
+            if (aspectRatio > 0) {
+                let constrainedHeight = dragWidth / aspectRatio;
+                let constrainedWidth = dragHeight * aspectRatio;
+
+                // Choose the constraint that results in a larger area (preserving the intended drag)
+                if (Math.abs(dragWidth * dragHeight) <= Math.abs(dragWidth * constrainedHeight)) {
+                    dragHeight = constrainedHeight;
+                } else {
+                    dragWidth = constrainedWidth;
+                }
+            }
+
+            // Calculate final position and dimensions (same logic as in updateSelection)
+            let left, top, width, height;
+            if (dragWidth >= 0 && dragHeight >= 0) {
+                // Dragging down-right
+                left = startX;
+                top = startY;
+                width = dragWidth;
+                height = dragHeight;
+            } else if (dragWidth >= 0 && dragHeight < 0) {
+                // Dragging up-right
+                left = startX;
+                top = startY + dragHeight;
+                width = dragWidth;
+                height = -dragHeight;
+            } else if (dragWidth < 0 && dragHeight >= 0) {
+                // Dragging down-left
+                left = startX + dragWidth;
+                top = startY;
+                width = -dragWidth;
+                height = dragHeight;
+            } else {
+                // Dragging up-left
+                left = startX + dragWidth;
+                top = startY + dragHeight;
+                width = -dragWidth;
+                height = -dragHeight;
+            }
+
+            // Update the selection box to reflect the final constrained dimensions
+            selectionBox.style.left = left + 'px';
+            selectionBox.style.top = top + 'px';
+            selectionBox.style.width = width + 'px';
+            selectionBox.style.height = height + 'px';
+
+            // Calculate the selected region in complex plane coordinates using the final constrained box
+            // Convert pixel coordinates to complex plane coordinates
+            // X coordinate transformation (left to right, same direction in both systems)
+            let selectedXMin = bounds[0] + (left / imgWidth) * (bounds[1] - bounds[0]);
+            let selectedXMax = bounds[0] + ((left + width) / imgWidth) * (bounds[1] - bounds[0]);
+
+            // Y coordinate transformation - account for potential vertical flip
+            // If the image is rendered flipped vertically, then the y-coordinates are already inverted
+            // So HTML y=0 (top) corresponds to complex y=-2 (bottom) and HTML y=imgHeight (bottom) corresponds to complex y=2 (top)
+            let selectedYMin = bounds[2] + (top / imgHeight) * (bounds[3] - bounds[2]);           // HTML top -> complex bottom
+            let selectedYMax = bounds[2] + ((top + height) / imgHeight) * (bounds[3] - bounds[2]); // HTML bottom -> complex top
+
+            // Ensure correct order
+            let xMin = Math.min(selectedXMin, selectedXMax);
+            let xMax = Math.max(selectedXMin, selectedXMax);
+            let yMin = Math.min(selectedYMin, selectedYMax);
+            let yMax = Math.max(selectedYMin, selectedYMax);
+
+            // If bounds are too similar (almost identical), create a reasonable area around the point
+            // Use a more reasonable epsilon based on the current bounds
+            const rangeX = bounds[1] - bounds[0];
+            const rangeY = bounds[3] - bounds[2];
+            const epsilonX = rangeX * 0.001; // 0.1% of the current view width
+            const epsilonY = rangeY * 0.001; // 0.1% of the current view height
+
+            if (Math.abs(xMax - xMin) < epsilonX) {
+                const center = (xMin + xMax) / 2;
+                xMin = center - epsilonX / 2;
+                xMax = center + epsilonX / 2;
+            }
+            if (Math.abs(yMax - yMin) < epsilonY) {
+                const center = (yMin + yMax) / 2;
+                yMin = center - epsilonY / 2;
+                yMax = center + epsilonY / 2;
+            }
+
+            // Get selected resolution
+            const resolutionSelect = document.getElementById('resolution-select');
+            const [widthRes, heightRes] = resolutionSelect.value.split('x').map(Number);
+
+            // Generate the command
+            const command = `ftk-julia --bounds={bounds} --dimensions={dimensions} --max-iterations=256 --spawn=-0.7,0.27015 --bailout=4 --formula="z^3 + c" --output="julia_zoom_$(date +%Y%m%d_%H%M%S).png"`.replace('{bounds}', `${xMin},${xMax},${yMin},${yMax}`)
+                                    .replace('{dimensions}', `${widthRes},${heightRes}`);
+
+            document.getElementById('command-output').textContent = command;
+        }
+
+        // Update resolution options when aspect ratio changes
+        document.querySelectorAll('input[name="aspect-ratio"]').forEach(radio => {
+            radio.addEventListener('change', function() {
+                updateResolutionOptions();
+                if (startX !== undefined && currentX !== undefined) {
+                    endSelection(); // Recalculate with new settings
+                }
+            });
+        });
+
+        // Update command when resolution changes
+        document.getElementById('resolution-select').addEventListener('change', function() {
+            if (startX !== undefined && currentX !== undefined) {
+                endSelection(); // Recalculate with new settings
+            }
+        });
+
+        function updateResolutionOptions() {
+            const selectedRatio = document.querySelector('input[name="aspect-ratio"]:checked').value;
+            const resolutions = aspectRatioResolutions[selectedRatio] || ["640x480", "1280x720", "1920x1080"];
+            const resolutionSelect = document.getElementById('resolution-select');
+
+            // Clear existing options
+            resolutionSelect.innerHTML = '';
+
+            // Add new options
+            resolutions.forEach((resolution, index) => {
+                const option = document.createElement('option');
+                option.value = resolution;
+                option.textContent = resolution;
+                if (index === 1) option.selected = true; // Select middle resolution by default
+                resolutionSelect.appendChild(option);
+            });
+        }
+    </script>
+</body>
+</html>

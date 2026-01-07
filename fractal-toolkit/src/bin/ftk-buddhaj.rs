@@ -164,7 +164,7 @@ fn main() {
     
     // Generate command template for the HTML
     let command_template = format!(
-        "ftk-buddhaj --bounds {{bounds}} --dimensions {{dimensions}} --min-iterations {} --max-iterations {} --samples {} --bailout {} --spawn {},{} --formula \"{}\" --red-channel {},{},{} --green-channel {},{},{} --blue-channel {},{},{} --output \"buddhaj_zoom_$(date +%Y%m%d_%H%M%S).png\"",
+        "ftk-buddhaj --bounds={{bounds}} --dimensions={{dimensions}} --min-iterations={} --max-iterations={} --samples={} --bailout={} --spawn={},{} --formula=\"{}\" --red-channel={},{},{} --green-channel={},{},{} --blue-channel={},{},{} --output=\"buddhaj_zoom_$(date +%Y%m%d_%H%M%S).png\"",
         args.min_iterations,
         args.max_iterations,
         args.samples,

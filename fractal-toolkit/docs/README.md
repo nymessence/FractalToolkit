@@ -43,11 +43,32 @@ cd fractal-toolkit
 cargo build --release
 ```
 
+### Installing the Binaries
+
+After building, you can install the binaries to your local user directory:
+
+```bash
+# Create the local bin directory if it doesn't exist
+mkdir -p ~/.local/bin
+
+# Copy the executables
+cp target/release/ftk-mandel ~/.local/bin/
+cp target/release/ftk-julia ~/.local/bin/
+cp target/release/ftk-buddha ~/.local/bin/
+cp target/release/ftk-buddhaj ~/.local/bin/
+```
+
+Make sure `~/.local/bin` is in your PATH. Add this line to your `~/.bashrc` or `~/.profile`:
+```bash
+export PATH="$HOME/.local/bin:$PATH"
+```
+
 The executables will be available in `target/release/`:
 - `ftk-mandel` - Mandelbrot generator
 - `ftk-julia` - Julia set generator
 - `ftk-buddha` - Buddhabrot generator
 - `ftk-buddhaj` - Buddhabrot Julia generator
+- `ftk-dca` - Domain color plot generator for complex functions
 
 ### Automated Installation
 

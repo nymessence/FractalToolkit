@@ -1,5 +1,5 @@
 use clap::Parser;
-use fractal_toolkit::{FractalParams, julia_iterations, pixel_to_complex, generate_html_file};
+use fractal_toolkit::{FractalParams, julia_iterations, pixel_to_complex, generate_html_file, parse_color_palette, ColorStop, generate_fractal_image};
 use image::{ImageBuffer, Rgba};
 
 #[derive(Parser)]
@@ -86,8 +86,25 @@ fn main() {
         formula_clone,
     );
 
+    // Parse color palette if provided
+    let color_palette = if let Some(ref palette_str) = args.color_pallette {
+        match parse_color_palette(palette_str) {
+            Ok(palette) => {
+                println!("Using color palette with {} stops", palette.len());
+                Some(palette)
+            },
+            Err(e) => {
+                eprintln!("Error parsing color palette: {}", e);
+                eprintln!("Using default coloring instead.");
+                None
+            }
+        }
+    } else {
+        None
+    };
+
     // Generate the fractal image
-    let img = generate_julia_image(width, height, &params);
+    let img = generate_julia_image(width, height, &params, color_palette.as_ref());
 
     // Save the image
     img.save(&args.output).expect("Failed to save image");
@@ -96,7 +113,7 @@ fn main() {
     // Generate command template for the HTML
     let command_template = if let Some(ref palette) = args.color_pallette {
         format!(
-            "ftk-julia --bounds {{bounds}} --dimensions {{dimensions}} --max-iterations {} --spawn {},{} --color-pallette \"{}\" --bailout {} --formula \"{}\" --output \"julia_zoom_$(date +%Y%m%d_%H%M%S).png\"",
+            "ftk-julia --bounds={{bounds}} --dimensions={{dimensions}} --max-iterations={} --spawn={},{} --color-pallette=\"{}\" --bailout={} --formula=\"{}\" --output=\"julia_zoom_$(date +%Y%m%d_%H%M%S).png\"",
             args.max_iterations,
             args.spawn[0],
             args.spawn[1],
@@ -106,7 +123,7 @@ fn main() {
         )
     } else {
         format!(
-            "ftk-julia --bounds {{bounds}} --dimensions {{dimensions}} --max-iterations {} --spawn {},{} --bailout {} --formula \"{}\" --output \"julia_zoom_$(date +%Y%m%d_%H%M%S).png\"",
+            "ftk-julia --bounds={{bounds}} --dimensions={{dimensions}} --max-iterations={} --spawn={},{} --bailout={} --formula=\"{}\" --output=\"julia_zoom_$(date +%Y%m%d_%H%M%S).png\"",
             args.max_iterations,
             args.spawn[0],
             args.spawn[1],
@@ -124,32 +141,6 @@ fn main() {
     }
 }
 
-fn generate_julia_image(width: u32, height: u32, params: &FractalParams) -> ImageBuffer<Rgba<u8>, Vec<u8>> {
-    let mut imgbuf = ImageBuffer::new(width, height);
-
-    for (x, y, pixel) in imgbuf.enumerate_pixels_mut() {
-        let z = pixel_to_complex(x, y, width, height, params.bounds);
-        let iterations = julia_iterations(z, params);
-
-        // Simple coloring based on iterations
-        let color = color_from_iterations(iterations, params.max_iterations);
-        *pixel = color;
-    }
-
-    imgbuf
-}
-
-// Simple function to convert iterations to a color
-fn color_from_iterations(iterations: u32, max_iterations: u32) -> Rgba<u8> {
-    if iterations == max_iterations {
-        // Inside the set - black
-        Rgba([0, 0, 0, 255])
-    } else {
-        // Outside the set - color based on iterations
-        let t = iterations as f64 / max_iterations as f64;
-        let r = (9.0 * (1.0 - t) * t * t * t * 255.0) as u8;
-        let g = (15.0 * (1.0 - t) * (1.0 - t) * t * t * 255.0) as u8;
-        let b = (8.5 * (1.0 - t) * (1.0 - t) * (1.0 - t) * t * 255.0) as u8;
-        Rgba([r, g, b, 255])
-    }
+fn generate_julia_image(width: u32, height: u32, params: &FractalParams, color_palette: Option<&Vec<ColorStop>>) -> ImageBuffer<Rgba<u8>, Vec<u8>> {
+    generate_fractal_image(width, height, params, |z, p| julia_iterations(z, p), color_palette)
 }

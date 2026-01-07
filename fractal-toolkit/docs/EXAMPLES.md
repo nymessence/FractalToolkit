@@ -164,6 +164,11 @@ ftk-mandel --bounds=-0.745,-0.743,0.110,0.112 --max-iterations=1024 --dimensions
 ftk-buddha --bounds=-2.0,2.0,-2.0,2.0 --dimensions=1024,1024 --min-iterations=10 --max-iterations=1000 --samples=1000000 --bailout=4.0 --formula="z^2 + c" --red-channel=10,100,400000 --green-channel=100,500,350000 --blue-channel=500,1000,250000 --output="buddha_detailed.png"
 ```
 
+### Ultra Resolution Complex Buddhabrot with Fine-Tuned Channels
+```bash
+ftk-buddha --bounds=-2.0,2.0,-2.0,2.0 --dimensions=8192,8192 --min-iterations=10 --max-iterations=10000 --samples=1000000000 --bailout=4.0 --formula="z^2 + c" --red-channel=100,100,400000000 --green-channel=1000,5000,350000000 --blue-channel=5000,10000,250000000 --output="buddha_ultra_detailed.png"
+```
+
 ### Buddhabrot Julia with High Iterations
 ```bash
 ftk-buddhaj --bounds=-2.0,2.0,-2.0,2.0 --dimensions=1024,1024 --min-iterations=50 --max-iterations=500 --samples=1000000 --bailout=4.0 --spawn=0.285,0.01 --formula="z^2 + c" --red-channel=50,200,400000 --green-channel=200,350,350000 --blue-channel=350,500,250000 --output="buddhaj_detailed.png"
@@ -272,5 +277,8 @@ The original example command from the documentation:
 ```bash
 ftk-mandel --bounds=-2.0,2.0,-2.0,2.0 --max-iterations=64 --dimensions=512,512 --spawn=0.0,0.0 --color-pallette="[(#FF0000,0.0),(#00FF00,0.5),(#0000FF,1.0)]" --formula="z^2 + c" --bailout=4.0 --output="mandel_$(date +%Y%m%d_%H%M%S).png"
 ```
+
+## Ultra high resolution render of a minibrot for wall art:
+ftk-mandel --bounds=-0.04290453181602061,-0.04282444273121655,-0.9897886081089382,-0.9897085190241341 --dimensions=8192,8192 --max-iterations=4096 --spawn=0,0 --color-pallette=--color-pallette=--color-pallette="[(#000000,0.0),(#000088,0.1111),(#0000FF,0.2222),(#0000FF,0.3333),(#00FFFF,0.4444),(#00FF00,0.5556),(#FFFF00,0.6667),(#FF0000,0.7778),(#880000,0.8889),(#000000,1.0)]" --bailout=1.0e100 --formula="z^2 + c" --output="mandel_zoom_$(date +%Y%m%d_%H%M%S).png"
 
 Note: The original example used `--color-pallette` (with a typo), but the correct option is `--color-pallette` as implemented in the code.
