@@ -1514,6 +1514,31 @@ pub fn buddhabrot_channel(
     histogram
 }
 
+/// Calculate the percentile of log-transformed values in a histogram
+fn calculate_percentile_log(hist: &Vec<Vec<f64>>, percentile: f64) -> f64 {
+    let mut values = Vec::new();
+
+    // Collect all non-zero values and apply log transform
+    for row in hist {
+        for &val in row {
+            if val > 0.0 {
+                values.push((val + 1.0).ln()); // Use ln(1 + x) to handle values close to 0
+            }
+        }
+    }
+
+    if values.is_empty() {
+        return 0.0;
+    }
+
+    // Sort the log-transformed values
+    values.sort_by(|a, b| a.partial_cmp(b).unwrap());
+
+    // Calculate the index for the desired percentile
+    let idx = ((percentile / 100.0) * (values.len() - 1) as f64).round() as usize;
+    values[idx.min(values.len() - 1)]
+}
+
 /// Generate a complete Buddhabrot image with RGB channels
 ///
 /// Combines the three RGB channels into a single image by rendering each channel
@@ -1534,33 +1559,48 @@ pub fn generate_buddhabrot(params: &BuddhabrotParams) -> image::RgbImage {
     let green_hist = buddhabrot_channel(params, &params.channels.green, params.channels.green.max_iter);
     let blue_hist = buddhabrot_channel(params, &params.channels.blue, params.channels.blue.max_iter);
 
-    // Find max values for normalization
-    let max_r = red_hist.iter().flatten().fold(0.0_f64, |a, &b| a.max(b));
-    let max_g = green_hist.iter().flatten().fold(0.0_f64, |a, &b| a.max(b));
-    let max_b = blue_hist.iter().flatten().fold(0.0_f64, |a, &b| a.max(b));
+    // Calculate 95th percentile of log-transformed values for each channel
+    // This gives us a more robust normalization value that's less sensitive to outliers
+    let log_percentile_r = calculate_percentile_log(&red_hist, 95.0);
+    let log_percentile_g = calculate_percentile_log(&green_hist, 95.0);
+    let log_percentile_b = calculate_percentile_log(&blue_hist, 95.0);
 
-    // Normalize and combine channels with logarithmic scaling for better dynamic range
+    // If all channels are zero, return a black image
+    if log_percentile_r == 0.0 && log_percentile_g == 0.0 && log_percentile_b == 0.0 {
+        return img; // Already initialized as black
+    }
+
+    // Normalize and combine channels using percentile-based normalization
     for y in 0..params.height as usize {
         for x in 0..params.width as usize {
-            let r_val = if max_r > 0.0 {
-                let norm = red_hist[y][x] / max_r;
-                // Use logarithmic scaling: log(1 + factor * normalized_value) / log(1 + factor)
-                // This enhances visibility of low values while preserving high values
-                let factor = 1000.0; // Adjust for desired contrast
-                let log_norm = (1.0 + factor * norm).ln() / (1.0 + factor).ln();
-                (log_norm * 255.0) as u8
+            let r_val = if log_percentile_r > 0.0 {
+                let raw_value = red_hist[y][x];
+                let log_value = if raw_value > 0.0 { (raw_value + 1.0).ln() } else { 0.0 };
+                let norm = if log_percentile_r > 0.0 { log_value / log_percentile_r } else { 0.0 };
+
+                // Clamp normalized value to [0, 1] range
+                let clamped_norm = norm.min(1.0).max(0.0);
+
+                // Apply final scaling to map to 0-255 range
+                (clamped_norm * 255.0) as u8
             } else { 0 };
-            let g_val = if max_g > 0.0 {
-                let norm = green_hist[y][x] / max_g;
-                let factor = 1000.0;
-                let log_norm = (1.0 + factor * norm).ln() / (1.0 + factor).ln();
-                (log_norm * 255.0) as u8
+
+            let g_val = if log_percentile_g > 0.0 {
+                let raw_value = green_hist[y][x];
+                let log_value = if raw_value > 0.0 { (raw_value + 1.0).ln() } else { 0.0 };
+                let norm = if log_percentile_g > 0.0 { log_value / log_percentile_g } else { 0.0 };
+
+                let clamped_norm = norm.min(1.0).max(0.0);
+                (clamped_norm * 255.0) as u8
             } else { 0 };
-            let b_val = if max_b > 0.0 {
-                let norm = blue_hist[y][x] / max_b;
-                let factor = 1000.0;
-                let log_norm = (1.0 + factor * norm).ln() / (1.0 + factor).ln();
-                (log_norm * 255.0) as u8
+
+            let b_val = if log_percentile_b > 0.0 {
+                let raw_value = blue_hist[y][x];
+                let log_value = if raw_value > 0.0 { (raw_value + 1.0).ln() } else { 0.0 };
+                let norm = if log_percentile_b > 0.0 { log_value / log_percentile_b } else { 0.0 };
+
+                let clamped_norm = norm.min(1.0).max(0.0);
+                (clamped_norm * 255.0) as u8
             } else { 0 };
 
             img.put_pixel(x as u32, y as u32, image::Rgb([r_val, g_val, b_val]));
@@ -1698,33 +1738,46 @@ pub fn generate_buddhabrot_julia(params: &BuddhabrotJuliaParams) -> image::RgbIm
     let green_hist = buddhabrot_julia_channel(params, &params.channels.green);
     let blue_hist = buddhabrot_julia_channel(params, &params.channels.blue);
 
-    // Find max values for normalization
-    let max_r = red_hist.iter().flatten().fold(0.0_f64, |a, &b| a.max(b));
-    let max_g = green_hist.iter().flatten().fold(0.0_f64, |a, &b| a.max(b));
-    let max_b = blue_hist.iter().flatten().fold(0.0_f64, |a, &b| a.max(b));
+    // Calculate 95th percentile of log-transformed values for each channel
+    // This gives us a more robust normalization value that's less sensitive to outliers
+    let log_percentile_r = calculate_percentile_log(&red_hist, 95.0);
+    let log_percentile_g = calculate_percentile_log(&green_hist, 95.0);
+    let log_percentile_b = calculate_percentile_log(&blue_hist, 95.0);
 
-    // Normalize and combine channels with logarithmic scaling for better dynamic range
+    // If all channels are zero, return a black image
+    if log_percentile_r == 0.0 && log_percentile_g == 0.0 && log_percentile_b == 0.0 {
+        return img; // Already initialized as black
+    }
+
+    // Normalize and combine channels using percentile-based normalization
     for y in 0..params.height as usize {
         for x in 0..params.width as usize {
-            let r_val = if max_r > 0.0 {
-                let norm = red_hist[y][x] / max_r;
-                // Use logarithmic scaling: log(1 + factor * normalized_value) / log(1 + factor)
-                // This enhances visibility of low values while preserving high values
-                let factor = 1000.0; // Adjust for desired contrast
-                let log_norm = (1.0 + factor * norm).ln() / (1.0 + factor).ln();
-                (log_norm * 255.0) as u8
+            let r_val = if log_percentile_r > 0.0 {
+                let raw_value = red_hist[y][x];
+                let log_value = if raw_value > 0.0 { (raw_value + 1.0).ln() } else { 0.0 };
+                let norm = if log_percentile_r > 0.0 { log_value / log_percentile_r } else { 0.0 };
+
+                // Clamp normalized value to [0, 1] range
+                let clamped_norm = norm.min(1.0).max(0.0);
+
+                // Apply final scaling to map to 0-255 range
+                (clamped_norm * 255.0) as u8
             } else { 0 };
-            let g_val = if max_g > 0.0 {
-                let norm = green_hist[y][x] / max_g;
-                let factor = 1000.0;
-                let log_norm = (1.0 + factor * norm).ln() / (1.0 + factor).ln();
-                (log_norm * 255.0) as u8
+            let g_val = if log_percentile_g > 0.0 {
+                let raw_value = green_hist[y][x];
+                let log_value = if raw_value > 0.0 { (raw_value + 1.0).ln() } else { 0.0 };
+                let norm = if log_percentile_g > 0.0 { log_value / log_percentile_g } else { 0.0 };
+
+                let clamped_norm = norm.min(1.0).max(0.0);
+                (clamped_norm * 255.0) as u8
             } else { 0 };
-            let b_val = if max_b > 0.0 {
-                let norm = blue_hist[y][x] / max_b;
-                let factor = 1000.0;
-                let log_norm = (1.0 + factor * norm).ln() / (1.0 + factor).ln();
-                (log_norm * 255.0) as u8
+            let b_val = if log_percentile_b > 0.0 {
+                let raw_value = blue_hist[y][x];
+                let log_value = if raw_value > 0.0 { (raw_value + 1.0).ln() } else { 0.0 };
+                let norm = if log_percentile_b > 0.0 { log_value / log_percentile_b } else { 0.0 };
+
+                let clamped_norm = norm.min(1.0).max(0.0);
+                (clamped_norm * 255.0) as u8
             } else { 0 };
 
             img.put_pixel(x as u32, y as u32, image::Rgb([r_val, g_val, b_val]));
