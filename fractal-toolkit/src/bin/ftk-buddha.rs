@@ -1,5 +1,14 @@
 use clap::Parser;
 use fractal_toolkit::{BuddhabrotParams, BuddhabrotChannels, BuddhabrotChannel, generate_buddhabrot, generate_html_file};
+use rayon::ThreadPoolBuilder;
+
+fn init_rayon_pool() {
+    let num_threads = num_cpus::get();
+    ThreadPoolBuilder::new()
+        .num_threads(num_threads)
+        .build_global()
+        .expect("Failed to initialize Rayon thread pool");
+}
 
 #[derive(Parser)]
 #[command(name = "ftk-buddha")]
@@ -52,8 +61,11 @@ struct Args {
 }
 
 fn main() {
+    // Initialize rayon thread pool with CPU core count
+    init_rayon_pool();
+
     let args = Args::parse();
-    
+
     println!("Generating Buddhabrot with:");
     println!("  Bounds: {:?}", args.bounds);
     println!("  Dimensions: {:?}", args.dimensions);

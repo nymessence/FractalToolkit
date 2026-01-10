@@ -1,6 +1,15 @@
 use clap::Parser;
-use fractal_toolkit::{FractalParams, julia_iterations, pixel_to_complex, generate_html_file, parse_color_palette, ColorStop, generate_fractal_image};
+use fractal_toolkit::{FractalParams, julia_iterations, generate_html_file, parse_color_palette, ColorStop, generate_fractal_image};
 use image::{ImageBuffer, Rgba};
+use rayon::ThreadPoolBuilder;
+
+fn init_rayon_pool() {
+    let num_threads = num_cpus::get();
+    ThreadPoolBuilder::new()
+        .num_threads(num_threads)
+        .build_global()
+        .expect("Failed to initialize Rayon thread pool");
+}
 
 #[derive(Parser)]
 #[command(name = "ftk-julia")]
@@ -41,6 +50,9 @@ struct Args {
 }
 
 fn main() {
+    // Initialize rayon thread pool with CPU core count
+    init_rayon_pool();
+
     let args = Args::parse();
 
     println!("Generating Julia set with:");

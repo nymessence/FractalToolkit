@@ -25,7 +25,7 @@ use serde::{Deserialize, Serialize};
 use std::f64::consts::PI;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
-use chrono::{DateTime, Local, Duration};
+use chrono::Local;
 
 /// Mathematical expression evaluator for complex numbers with support for various functions
 #[derive(Debug, Clone)]
@@ -766,41 +766,6 @@ fn gamma_approximation(x: f64) -> f64 {
     }
 } // End of MathEvaluator implementation
 
-/// Regular tetration for real base and height
-/// Uses the regular iteration method for bases in the range (1, e^(1/e))
-fn regular_tetration(base: f64, height: f64) -> f64 {
-    if height.fract() == 0.0 {
-        // For integer heights, use the iterative approach
-        let n = height as u32;
-        if n == 0 {
-            1.0  // By convention, base^^0 = 1
-        } else {
-            let mut result = base;
-            for _ in 1..n {
-                result = base.powf(result);
-            }
-            result
-        }
-    } else {
-        // For non-integer heights, use the regular iteration method
-        // This is a simplified implementation - a full implementation would be much more complex
-        // We'll use linear approximation between integer values
-        let int_part = height.floor();
-        let frac_part = height - int_part;
-
-        if frac_part < 0.001 {  // Essentially an integer
-            return regular_tetration(base, int_part);
-        }
-
-        // Calculate base^^(int_part) and base^^(int_part + 1)
-        let lower = regular_tetration(base, int_part);
-        let upper = base.powf(lower);  // This is base^^(int_part + 1)
-
-        // Linear interpolation
-        lower + frac_part * (upper - lower)
-    }
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FractalParams {
     pub bounds: [f64; 4],           // [x_min, x_max, y_min, y_max]
@@ -1422,85 +1387,84 @@ pub fn buddhabrot_channel(
     channel_params: &BuddhabrotChannel,
     _escape_count: u32,
 ) -> Vec<Vec<f64>> {
-    use std::time::{Duration, Instant};
-    use chrono::{Local, Duration as ChronoDuration};
+    use std::time::Instant;
+    use std::collections::HashMap;
 
-    let mut histogram = vec![vec![0.0; params.width as usize]; params.height as usize];
     let [x_min, x_max, y_min, y_max] = params.bounds;
-
-    // Generate random samples
-    let mut rng = rand::rngs::StdRng::seed_from_u64(42); // Fixed seed for reproducibility
 
     let total_samples = channel_params.samples;
     let start_time = Instant::now();
-    let mut last_report_time = Instant::now();
-    let report_interval = Duration::from_secs(10); // Report every 10 seconds
 
     // Print initial progress
-    println!("Generating Buddhabrot channel: 0% (0/{}) - Started at {:?}", total_samples, Local::now().format("%H:%M:%S"));
+    println!("Generating Buddhabrot channel: 0% (0/{}) - Started at {:?}. Using {} threads.",
+             total_samples, Local::now().format("%H:%M:%S"), rayon::current_num_threads());
 
-    for sample_num in 0..total_samples {
-        // Randomly sample a c value in the complex plane
-        let c_re = x_min + (x_max - x_min) * rng.gen::<f64>();
-        let c_im = y_min + (y_max - y_min) * rng.gen::<f64>();
-        let c = Complex::new(c_re, c_im);
+    // Determine chunk size for parallel processing
+    let chunk_size = (total_samples / (rayon::current_num_threads() as u64 * 4)).max(1000);
 
-        // Check if this point escapes within the iteration range
-        let mut z = Complex::new(0.0, 0.0);
-        let mut iter = 0;
-        let mut orbit = Vec::new();
+    // Process samples in chunks using parallel iterator
+    // Create a custom iterator that yields chunks of sample numbers
+    let num_chunks = std::cmp::max((total_samples as usize) / chunk_size as usize, 1);
+    let partial_histograms: Vec<HashMap<(usize, usize), f64>> = (0..num_chunks)
+        .into_par_iter()
+        .map(|chunk_idx| {
+            let start_sample = (chunk_idx as u64) * chunk_size;
+            let end_sample = std::cmp::min(start_sample + chunk_size, total_samples);
 
-        // Track the orbit
-        while iter < channel_params.max_iter {
-            orbit.push(z);
-            // Use the formula specified in params, defaulting to z^2 + c if evaluation fails
-            z = match MathEvaluator::evaluate_formula_with_param(&params.formula, z, c) {
-                Ok(result) => result,
-                Err(_) => z * z + c, // Fallback to standard formula
-            };
+            let mut local_histogram = HashMap::new();
+            // Use a deterministic seed based on the chunk index to ensure reproducible results
+            let mut rng = rand::rngs::StdRng::seed_from_u64(start_sample ^ 0xdeadbeef);
 
-            if z.norm_sqr() > params.bailout * params.bailout {
-                // Point escapes, check if it's in the right iteration range
-                if iter >= channel_params.min_iter {
-                    // Draw the orbit
-                    for point in &orbit {
-                        let px = ((point.re - x_min) / (x_max - x_min) * params.width as f64) as usize;
-                        let py = ((point.im - y_min) / (y_max - y_min) * params.height as f64) as usize;
+            for _sample_num in start_sample..end_sample {
+                // Randomly sample a c value in the complex plane using the local RNG
+                let c_re = x_min + (x_max - x_min) * rng.gen::<f64>();
+                let c_im = y_min + (y_max - y_min) * rng.gen::<f64>();
+                let c = Complex::new(c_re, c_im);
 
-                        if px < params.width as usize && py < params.height as usize {
-                            histogram[py][px] += 1.0;
+                // Check if this point escapes within the iteration range
+                let mut z = Complex::new(0.0, 0.0);
+                let mut iter = 0;
+                let mut orbit = Vec::new();
+
+                // Track the orbit
+                while iter < channel_params.max_iter {
+                    orbit.push(z);
+                    // Use the formula specified in params, defaulting to z^2 + c if evaluation fails
+                    z = match MathEvaluator::evaluate_formula_with_param(&params.formula, z, c) {
+                        Ok(result) => result,
+                        Err(_) => z * z + c, // Fallback to standard formula
+                    };
+
+                    if z.norm_sqr() > params.bailout * params.bailout {
+                        // Point escapes, check if it's in the right iteration range
+                        if iter >= channel_params.min_iter {
+                            // Draw the orbit - accumulate locally first
+                            for point in &orbit {
+                                let px = ((point.re - x_min) / (x_max - x_min) * params.width as f64) as usize;
+                                let py = ((point.im - y_min) / (y_max - y_min) * params.height as f64) as usize;
+
+                                if px < params.width as usize && py < params.height as usize {
+                                    *local_histogram.entry((px, py)).or_insert(0.0) += 1.0;
+                                }
+                            }
                         }
+                        break;
                     }
+                    iter += 1;
                 }
-                break;
             }
-            iter += 1;
-        }
+            local_histogram
+        })
+        .collect();
 
-        // Time-based progress reporting every 10 seconds
-        if last_report_time.elapsed() >= report_interval {
-            let elapsed = start_time.elapsed();
-            let percentage = ((sample_num + 1) as f64 / total_samples as f64 * 100.0).round();
+    // Merge all partial histograms into the final histogram
+    let mut final_histogram = vec![vec![0.0; params.width as usize]; params.height as usize];
 
-            if sample_num > 0 {
-                let rate = (sample_num + 1) as f64 / elapsed.as_secs_f64(); // samples per second
-                let remaining_samples = (total_samples - (sample_num + 1)) as f64;
-                let estimated_remaining_time = remaining_samples / rate; // seconds
-
-                let eta = Local::now() + ChronoDuration::seconds(estimated_remaining_time as i64);
-
-                println!(
-                    "Generating Buddhabrot channel: {:.1}% ({}/{}), Elapsed: {:.1}s, ETA: {} (~{:.1}s remaining)",
-                    percentage,
-                    sample_num + 1,
-                    total_samples,
-                    elapsed.as_secs_f64(),
-                    eta.format("%H:%M:%S"),
-                    estimated_remaining_time
-                );
+    for partial_hist in partial_histograms {
+        for ((x, y), value) in partial_hist {
+            if x < params.width as usize && y < params.height as usize {
+                final_histogram[y][x] += value;
             }
-
-            last_report_time = Instant::now();
         }
     }
 
@@ -1511,7 +1475,7 @@ pub fn buddhabrot_channel(
         total_samples, total_samples, elapsed.as_secs_f64()
     );
 
-    histogram
+    final_histogram
 }
 
 /// Calculate the percentile of log-transformed values in a histogram
@@ -1627,84 +1591,82 @@ pub fn buddhabrot_julia_channel(
     params: &BuddhabrotJuliaParams,
     channel_params: &BuddhabrotChannel,
 ) -> Vec<Vec<f64>> {
-    use std::time::{Duration, Instant};
-    use chrono::{Local, Duration as ChronoDuration};
+    use std::time::Instant;
+    use std::collections::HashMap;
 
-    let mut histogram = vec![vec![0.0; params.width as usize]; params.height as usize];
     let [x_min, x_max, y_min, y_max] = params.bounds;
-
-    // Generate random samples
-    let mut rng = rand::rngs::StdRng::seed_from_u64(42); // Fixed seed for reproducibility
 
     let total_samples = channel_params.samples;
     let start_time = Instant::now();
-    let mut last_report_time = Instant::now();
-    let report_interval = Duration::from_secs(10); // Report every 10 seconds
 
     // Print initial progress
-    println!("Generating Buddhabrot Julia channel: 0% (0/{}) - Started at {:?}", total_samples, Local::now().format("%H:%M:%S"));
+    println!("Generating Buddhabrot Julia channel: 0% (0/{}) - Started at {:?}. Using {} threads.",
+             total_samples, Local::now().format("%H:%M:%S"), rayon::current_num_threads());
 
-    for sample_num in 0..total_samples {
-        // Randomly sample a z0 value in the complex plane
-        let z_re = x_min + (x_max - x_min) * rng.gen::<f64>();
-        let z_im = y_min + (y_max - y_min) * rng.gen::<f64>();
-        let mut z = Complex::new(z_re, z_im);
+    // Determine chunk size for parallel processing
+    let chunk_size = (total_samples / (rayon::current_num_threads() as u64 * 4)).max(1000);
+    let num_chunks = std::cmp::max((total_samples as usize) / chunk_size as usize, 1);
 
-        // Check if this point escapes within the iteration range
-        let mut iter = 0;
-        let mut orbit = Vec::new();
+    // Process samples in chunks using parallel iterator
+    let partial_histograms: Vec<HashMap<(usize, usize), f64>> = (0..num_chunks)
+        .into_par_iter()
+        .map(|chunk_idx| {
+            let start_sample = (chunk_idx as u64) * chunk_size;
+            let end_sample = std::cmp::min(start_sample + chunk_size, total_samples);
 
-        // Track the orbit
-        while iter < channel_params.max_iter {
-            orbit.push(z);
-            // Use the formula specified in params, defaulting to z^2 + c if evaluation fails
-            z = match MathEvaluator::evaluate_formula_with_param(&params.formula, z, params.spawn) {
-                Ok(result) => result,
-                Err(_) => z * z + params.spawn, // Fallback to standard Julia formula
-            };
+            let mut local_histogram = HashMap::new();
+            // Use a deterministic seed based on the chunk index to ensure reproducible results
+            let mut rng = rand::rngs::StdRng::seed_from_u64(start_sample ^ 0xcafebabe);
 
-            if z.norm_sqr() > params.bailout * params.bailout {
-                // Point escapes, check if it's in the right iteration range
-                if iter >= channel_params.min_iter {
-                    // Draw the orbit
-                    for point in &orbit {
-                        let px = ((point.re - x_min) / (x_max - x_min) * params.width as f64) as usize;
-                        let py = ((point.im - y_min) / (y_max - y_min) * params.height as f64) as usize;
+            for _sample_num in start_sample..end_sample {
+                // Randomly sample a z0 value in the complex plane using the local RNG
+                let z_re = x_min + (x_max - x_min) * rng.gen::<f64>();
+                let z_im = y_min + (y_max - y_min) * rng.gen::<f64>();
+                let mut z = Complex::new(z_re, z_im);
 
-                        if px < params.width as usize && py < params.height as usize {
-                            histogram[py][px] += 1.0;
+                // Check if this point escapes within the iteration range
+                let mut iter = 0;
+                let mut orbit = Vec::new();
+
+                // Track the orbit
+                while iter < channel_params.max_iter {
+                    orbit.push(z);
+                    // Use the formula specified in params, defaulting to z^2 + c if evaluation fails
+                    z = match MathEvaluator::evaluate_formula_with_param(&params.formula, z, params.spawn) {
+                        Ok(result) => result,
+                        Err(_) => z * z + params.spawn, // Fallback to standard Julia formula
+                    };
+
+                    if z.norm_sqr() > params.bailout * params.bailout {
+                        // Point escapes, check if it's in the right iteration range
+                        if iter >= channel_params.min_iter {
+                            // Draw the orbit - accumulate locally first
+                            for point in &orbit {
+                                let px = ((point.re - x_min) / (x_max - x_min) * params.width as f64) as usize;
+                                let py = ((point.im - y_min) / (y_max - y_min) * params.height as f64) as usize;
+
+                                if px < params.width as usize && py < params.height as usize {
+                                    *local_histogram.entry((px, py)).or_insert(0.0) += 1.0;
+                                }
+                            }
                         }
+                        break;
                     }
+                    iter += 1;
                 }
-                break;
             }
-            iter += 1;
-        }
+            local_histogram
+        })
+        .collect();
 
-        // Time-based progress reporting every 10 seconds
-        if last_report_time.elapsed() >= report_interval {
-            let elapsed = start_time.elapsed();
-            let percentage = ((sample_num + 1) as f64 / total_samples as f64 * 100.0).round();
+    // Merge all partial histograms into the final histogram
+    let mut final_histogram = vec![vec![0.0; params.width as usize]; params.height as usize];
 
-            if sample_num > 0 {
-                let rate = (sample_num + 1) as f64 / elapsed.as_secs_f64(); // samples per second
-                let remaining_samples = (total_samples - (sample_num + 1)) as f64;
-                let estimated_remaining_time = remaining_samples / rate; // seconds
-
-                let eta = Local::now() + ChronoDuration::seconds(estimated_remaining_time as i64);
-
-                println!(
-                    "Generating Buddhabrot Julia channel: {:.1}% ({}/{}), Elapsed: {:.1}s, ETA: {} (~{:.1}s remaining)",
-                    percentage,
-                    sample_num + 1,
-                    total_samples,
-                    elapsed.as_secs_f64(),
-                    eta.format("%H:%M:%S"),
-                    estimated_remaining_time
-                );
+    for partial_hist in partial_histograms {
+        for ((x, y), value) in partial_hist {
+            if x < params.width as usize && y < params.height as usize {
+                final_histogram[y][x] += value;
             }
-
-            last_report_time = Instant::now();
         }
     }
 
@@ -1715,7 +1677,7 @@ pub fn buddhabrot_julia_channel(
         total_samples, total_samples, elapsed.as_secs_f64()
     );
 
-    histogram
+    final_histogram
 }
 
 /// Generate a complete Buddhabrot Julia image with RGB channels
@@ -1836,11 +1798,19 @@ pub fn pixel_to_complex(x: u32, y: u32, width: u32, height: u32, bounds: [f64; 4
 ///
 /// An RGB image representing the domain coloring of the complex function
 pub fn generate_domain_color_plot(params: &DomainColorParams) -> image::RgbImage {
-    let mut img = image::RgbImage::new(params.width, params.height);
-    let [_x_min, _x_max, _y_min, _y_max] = params.bounds; // Keep for documentation purposes
+    use rayon::prelude::*;
+    use std::sync::Arc;
 
-    for y in 0..params.height {
-        for x in 0..params.width {
+    let img = image::RgbImage::new(params.width, params.height);
+    let img_arc = Arc::new(img);
+
+    // Create a vector of (x, y) coordinates to process in parallel
+    let coords: Vec<(u32, u32)> = (0..params.height).flat_map(|y| (0..params.width).map(move |x| (x, y))).collect();
+
+    // Process pixels in parallel
+    let results: Vec<((u32, u32), [u8; 3])> = coords
+        .into_par_iter()
+        .map(|(x, y)| {
             // Convert pixel coordinates to complex plane coordinates
             let z = pixel_to_complex(x, y, params.width, params.height, params.bounds);
 
@@ -1869,8 +1839,14 @@ pub fn generate_domain_color_plot(params: &DomainColorParams) -> image::RgbImage
             // Convert HSV to RGB
             let rgb = hsv_to_rgb(hue, 1.0, brightness);
 
-            img.put_pixel(x, y, image::Rgb(rgb));
-        }
+            ((x, y), rgb)
+        })
+        .collect();
+
+    // Create a mutable image and populate it with the results
+    let mut img = Arc::try_unwrap(img_arc).unwrap_or_else(|arc| (*arc).clone());
+    for ((x, y), rgb) in results {
+        img.put_pixel(x, y, image::Rgb(rgb));
     }
 
     img
@@ -2139,6 +2115,8 @@ pub fn color_from_iterations(iterations: u32, max_iterations: u32) -> image::Rgb
     }
 }
 
+use rayon::prelude::*;
+
 // Generate fractal image with time-based progress bar and ETA with color palette support
 pub fn generate_fractal_image<F>(
     width: u32,
@@ -2148,7 +2126,7 @@ pub fn generate_fractal_image<F>(
     color_palette: Option<&Vec<ColorStop>>,
 ) -> image::ImageBuffer<image::Rgba<u8>, Vec<u8>>
 where
-    F: Fn(Complex<f64>, &FractalParams) -> u32,
+    F: Fn(Complex<f64>, &FractalParams) -> u32 + Sync + Copy,
 {
     use std::time::{Duration, Instant};
 
@@ -2160,52 +2138,63 @@ where
     let start_time = Instant::now();
 
     // Print initial progress
-    println!("Rendering fractal: 0% (0/{}) - Started at {:?}", total_pixels, chrono::Local::now().format("%H:%M:%S"));
+    println!("Rendering fractal: 0% (0/{}) - Started at {:?}. Using {} threads.",
+             total_pixels, chrono::Local::now().format("%H:%M:%S"), rayon::current_num_threads());
 
-    let mut last_report_time = Instant::now();
+    let last_report_time = Instant::now();
     let report_interval = Duration::from_secs(10); // Report every 10 seconds
 
-    for (x, y, pixel) in imgbuf.enumerate_pixels_mut() {
-        let c = pixel_to_complex(x, y, width, height, params.bounds);
-        let iterations = iteration_func(c, params);
+    // Create a vector of (x, y) coordinates to process in parallel
+    let coords: Vec<(u32, u32)> = (0..height).flat_map(|y| (0..width).map(move |x| (x, y))).collect();
 
-        // Choose coloring method based on whether palette is provided
-        let color = if let Some(palette) = color_palette {
-            color_from_iterations_with_palette(iterations, params.max_iterations, palette)
-        } else {
-            color_from_iterations(iterations, params.max_iterations)
-        };
+    // Process pixels in parallel
+    let results: Vec<((u32, u32), image::Rgba<u8>)> = coords
+        .into_par_iter()
+        .map(|(x, y)| {
+            let c = pixel_to_complex(x, y, width, height, params.bounds);
+            let iterations = iteration_func(c, params);
 
-        *pixel = color;
+            // Choose coloring method based on whether palette is provided
+            let color = if let Some(palette) = color_palette {
+                color_from_iterations_with_palette(iterations, params.max_iterations, palette)
+            } else {
+                color_from_iterations(iterations, params.max_iterations)
+            };
 
-        // Update progress counter
-        let current = processed_pixels.fetch_add(1, Ordering::SeqCst) + 1;
+            // Update progress counter
+            let current = processed_pixels.fetch_add(1, Ordering::SeqCst) + 1;
 
-        // Time-based progress reporting every 10 seconds
-        if last_report_time.elapsed() >= report_interval {
-            let elapsed = start_time.elapsed();
-            let percentage = (current as f64 / total_pixels as f64 * 100.0).round();
+            // Time-based progress reporting every 10 seconds
+            if last_report_time.elapsed() >= report_interval {
+                let elapsed = start_time.elapsed();
+                let percentage = (current as f64 / total_pixels as f64 * 100.0).round();
 
-            if current > 0 {
-                let rate = current as f64 / elapsed.as_secs_f64(); // pixels per second
-                let remaining_pixels = (total_pixels as usize - current) as f64;
-                let estimated_remaining_time = remaining_pixels / rate; // seconds
+                if current > 0 {
+                    let rate = current as f64 / elapsed.as_secs_f64(); // pixels per second
+                    let remaining_pixels = (total_pixels as usize - current) as f64;
+                    let estimated_remaining_time = remaining_pixels / rate; // seconds
 
-                let eta = chrono::Local::now() + chrono::Duration::seconds(estimated_remaining_time as i64);
+                    let eta = chrono::Local::now() + chrono::Duration::seconds(estimated_remaining_time as i64);
 
-                println!(
-                    "Rendering fractal: {:.1}% ({}/{}), Elapsed: {:.1}s, ETA: {} (~{:.1}s remaining)",
-                    percentage,
-                    current,
-                    total_pixels,
-                    elapsed.as_secs_f64(),
-                    eta.format("%H:%M:%S"),
-                    estimated_remaining_time
-                );
+                    println!(
+                        "Rendering fractal: {:.1}% ({}/{}), Elapsed: {:.1}s, ETA: {} (~{:.1}s remaining)",
+                        percentage,
+                        current,
+                        total_pixels,
+                        elapsed.as_secs_f64(),
+                        eta.format("%H:%M:%S"),
+                        estimated_remaining_time
+                    );
+                }
             }
 
-            last_report_time = Instant::now();
-        }
+            ((x, y), color)
+        })
+        .collect();
+
+    // Put the results back into the image buffer
+    for ((x, y), color) in results {
+        imgbuf.put_pixel(x, y, color);
     }
 
     // Final progress report
