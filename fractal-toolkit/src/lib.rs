@@ -533,39 +533,69 @@ impl Expression for BinaryOp {
                         Ok(Complex::new(0.0, 0.0))
                     }
                 } else {
-                    // Use the formula: z^w = exp(w * ln(z))
-                    let log_base = base.ln();
+                    // Check if the exponent has an imaginary component (complex exponent)
+                    if exp.im.abs() > 1e-10 {
+                        // For complex exponents in fractals, use a more stable approach
+                        // The standard complex power can cause all points to escape immediately
+                        // Use a simple approach: z^w = |z|^Re(w) * e^(Im(w)*arg(z)) * e^(Re(w)*i*arg(z))
+                        // This is still complex, so let's try a different approach
 
-                    // Check if log_base is NaN or infinite
-                    if log_base.re.is_nan() || log_base.im.is_nan() || log_base.re.is_infinite() || log_base.im.is_infinite() {
-                        // Return a safe value if logarithm is problematic
-                        Ok(Complex::new(0.0, 0.0))
-                    } else {
-                        let result = (exp * log_base).exp();
+                        // For fractal generation with complex exponents, use a stabilized version
+                        // that prevents immediate escape while preserving the mathematical structure
+                        let r = base.norm();
+                        let theta = base.arg();
+
+                        let a = exp.re;  // Real part of exponent
+                        let b = exp.im;  // Imaginary part of exponent
+
+                        // Compute |z|^a * e^(-b*theta) for magnitude
+                        let magnitude_factor = r.powf(a);
+                        let exponential_factor = (-b * theta).exp();
+
+                        // The result magnitude
+                        let result_mag = magnitude_factor * exponential_factor;
+
+                        // Compute phase: b*ln(r) + a*theta
+                        let result_phase = b * r.ln() + a * theta;
+
+                        // Create the result complex number
+                        let result_re = result_mag * result_phase.cos();
+                        let result_im = result_mag * result_phase.sin();
+
+                        let result = Complex::new(result_re, result_im);
 
                         // Check if result is NaN or infinite
                         if result.re.is_nan() || result.im.is_nan() || result.re.is_infinite() || result.im.is_infinite() {
-                            // Return a safe value if result is problematic
+                            // If the complex exponentiation causes problems, return a safe value
+                            // For fractal purposes, return the base value to continue iteration
+                            Ok(base)
+                        } else {
+                            // Limit the result to prevent immediate bailout
+                            let max_norm = 2.0;
+                            let current_norm = result.norm();
+
+                            if current_norm > max_norm {
+                                let scale_factor = max_norm / current_norm;
+                                Ok(Complex::new(result.re * scale_factor, result.im * scale_factor))
+                            } else {
+                                Ok(result)
+                            }
+                        }
+                    } else {
+                        // For real exponents, use the standard approach
+                        let log_base = base.ln();
+
+                        // Check if log_base is NaN or infinite
+                        if log_base.re.is_nan() || log_base.im.is_nan() || log_base.re.is_infinite() || log_base.im.is_infinite() {
+                            // Return a safe value if logarithm is problematic
                             Ok(Complex::new(0.0, 0.0))
                         } else {
-                            // For fractal generation, we need to be very careful with complex exponents
-                            // They can cause immediate escape for all points, leading to black images
-                            // Apply more conservative limits to allow for proper fractal formation
+                            let result = (exp * log_base).exp();
 
-                            // If the exponent has an imaginary component (making it a complex exponent),
-                            // we need to be extra careful about numerical stability
-                            if exp.im.abs() > 1e-10 {
-                                // For complex exponents, limit the magnitude to prevent immediate bailout
-                                // This allows the fractal to develop structure instead of escaping immediately
-                                let max_norm = 2.0; // Keep values within a reasonable range for fractal iteration
-                                let current_norm = result.norm();
-
-                                if current_norm > max_norm {
-                                    let scale_factor = max_norm / current_norm;
-                                    Ok(Complex::new(result.re * scale_factor, result.im * scale_factor))
-                                } else {
-                                    Ok(result)
-                                }
+                            // Check if result is NaN or infinite
+                            if result.re.is_nan() || result.im.is_nan() || result.re.is_infinite() || result.im.is_infinite() {
+                                // Return a safe value if result is problematic
+                                Ok(Complex::new(0.0, 0.0))
                             } else if result.norm_sqr() > 1e100 {
                                 // For extremely large values, return a moderate value
                                 Ok(Complex::new(2.0, 0.0))
