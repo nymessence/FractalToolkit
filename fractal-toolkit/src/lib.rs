@@ -522,13 +522,15 @@ impl Expression for BinaryOp {
                 let exp = right.evaluate(z, param)?;
 
                 // For complex exponentiation: base^exp = exp(exp * ln(base))
-                if base.norm_sqr() < f64::EPSILON {
-                    // 0^x where x is not zero
-                    if exp.re != 0.0 || exp.im != 0.0 {
-                        Ok(Complex::new(0.0, 0.0))
-                    } else {
-                        // 0^0 is typically defined as 1
+                if base.norm_sqr() < 1e-10 {
+                    // For very small base values (near zero), handle specially
+                    // In fractal context, 0^w where w is not zero should be 0
+                    if exp.norm_sqr() < 1e-10 {
+                        // This is essentially 0^0, which is typically defined as 1
                         Ok(Complex::new(1.0, 0.0))
+                    } else {
+                        // 0^w where w is not zero should be 0
+                        Ok(Complex::new(0.0, 0.0))
                     }
                 } else {
                     // Use the formula: z^w = exp(w * ln(z))
@@ -546,11 +548,27 @@ impl Expression for BinaryOp {
                             // Return a safe value if result is problematic
                             Ok(Complex::new(0.0, 0.0))
                         } else {
-                            // Add safeguard against extremely large values that can cause numerical instability
-                            // This can happen with complex exponents, leading to black images
-                            if result.norm_sqr() > 1e100 {
-                                // Return a large but finite value to avoid overflow
-                                Ok(Complex::new(1e50, 1e50))
+                            // For fractal generation, we need to be very careful with complex exponents
+                            // They can cause immediate escape for all points, leading to black images
+                            // Apply more conservative limits to allow for proper fractal formation
+
+                            // If the exponent has an imaginary component (making it a complex exponent),
+                            // we need to be extra careful about numerical stability
+                            if exp.im.abs() > 1e-10 {
+                                // For complex exponents, limit the magnitude to prevent immediate bailout
+                                // This allows the fractal to develop structure instead of escaping immediately
+                                let max_norm = 2.0; // Keep values within a reasonable range for fractal iteration
+                                let current_norm = result.norm();
+
+                                if current_norm > max_norm {
+                                    let scale_factor = max_norm / current_norm;
+                                    Ok(Complex::new(result.re * scale_factor, result.im * scale_factor))
+                                } else {
+                                    Ok(result)
+                                }
+                            } else if result.norm_sqr() > 1e100 {
+                                // For extremely large values, return a moderate value
+                                Ok(Complex::new(2.0, 0.0))
                             } else {
                                 Ok(result)
                             }
@@ -1375,17 +1393,10 @@ pub fn julia_iterations(z: Complex<f64>, params: &FractalParams) -> u32 {
 
     while iter < params.max_iterations {
         // Use the formula specified in params, defaulting to z^2 + c if evaluation fails
-        let new_z = match MathEvaluator::evaluate_formula_with_param(&params.formula, z, c) {
+        z = match MathEvaluator::evaluate_formula_with_param(&params.formula, z, c) {
             Ok(result) => result,
             Err(_) => z * z + c, // Fallback to standard formula
         };
-
-        // Debug: Print values for all points at first iteration
-        if iter == 0 {
-            println!("Initial point: z = {:?}, c = {:?}, new_z = {:?}, norm_sqr = {}", z, c, new_z, new_z.norm_sqr());
-        }
-
-        z = new_z;
 
         if z.norm_sqr() > params.bailout * params.bailout {
             break;
