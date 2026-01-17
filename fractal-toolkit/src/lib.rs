@@ -1377,6 +1377,14 @@ pub fn mandelbrot_iterations(c: Complex<f64>, params: &FractalParams) -> u32 {
             Err(_) => z * z + c, // Fallback to standard formula
         };
 
+        // Debug: Check if we're getting stuck in a loop for the complex exponent formula
+        if params.max_iterations == 16 && iter == 0 {
+            // Only for testing - check if this is the complex exponent formula
+            if params.formula.to_string().contains("(2.7") || params.formula.to_string().contains("0.3i") {
+                eprintln!("DEBUG: First iteration for c=({:.3}, {:.3}): z=({:.3}, {:.3}), |z|²={:.3}",
+                         c.re, c.im, z.re, z.im, z.norm_sqr());
+            }
+        }
 
         if z.norm_sqr() > params.bailout * params.bailout {
             break;
