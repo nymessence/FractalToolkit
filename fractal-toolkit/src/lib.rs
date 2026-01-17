@@ -533,34 +533,47 @@ impl Expression for BinaryOp {
                         Ok(Complex::new(0.0, 0.0))
                     }
                 } else {
-                    // Use the proper mathematical formula: z^w = exp(w * ln(z))
-                    // where ln(z) = ln(|z|) + i*arg(z)
-                    let r = base.norm();  // |z|
-                    let theta = base.arg();  // arg(z), ensuring it's in the principal branch (-π, π]
+                    // Check if the exponent is purely real (no imaginary component)
+                    if exp.im.abs() < 1e-10 {
+                        // For real exponents, use the standard approach which should work well
+                        // This preserves the original behavior for real exponents like z^2, z^3, z^2.7, etc.
+                        let result = base.powf(exp.re);
 
-                    // ln(z) = ln(r) + i*theta
-                    let log_base = Complex::new(r.ln(), theta);
-
-                    // w * ln(z) = (exp.re + i*exp.im) * (ln(r) + i*theta)
-                    // = exp.re*ln(r) - exp.im*theta + i*(exp.im*ln(r) + exp.re*theta)
-                    let w_ln_z = exp * log_base;
-
-                    // z^w = exp(w * ln(z))
-                    let result = w_ln_z.exp();
-
-                    // Check if result is NaN or infinite
-                    if result.re.is_nan() || result.im.is_nan() || result.re.is_infinite() || result.im.is_infinite() {
-                        // Return a safe value if result is problematic
-                        Ok(Complex::new(0.0, 0.0))
-                    } else if result.norm_sqr() > 1e100 {
-                        // For extremely large values, return a moderate value
-                        Ok(Complex::new(2.0, 0.0))
+                        // Check if result is NaN or infinite
+                        if result.re.is_nan() || result.im.is_nan() || result.re.is_infinite() || result.im.is_infinite() {
+                            // Return a safe value if result is problematic
+                            Ok(Complex::new(0.0, 0.0))
+                        } else if result.norm_sqr() > 1e100 {
+                            // For extremely large values, return a moderate value
+                            Ok(Complex::new(2.0, 0.0))
+                        } else {
+                            Ok(result)
+                        }
                     } else {
-                        // For fractal generation, we need to be careful with complex exponents
-                        // that can cause immediate escape for all points
-                        // If the exponent has an imaginary component, we may need to be more conservative
-                        if exp.im.abs() > 1e-10 {
-                            // For complex exponents, limit the result to prevent immediate bailout
+                        // For complex exponents, use the complex formula: z^w = exp(w * ln(z))
+                        // where ln(z) = ln(|z|) + i*arg(z)
+                        let r = base.norm();  // |z|
+                        let theta = base.arg();  // arg(z), ensuring it's in the principal branch (-π, π]
+
+                        // ln(z) = ln(r) + i*theta
+                        let log_base = Complex::new(r.ln(), theta);
+
+                        // w * ln(z) = (exp.re + i*exp.im) * (ln(r) + i*theta)
+                        // = exp.re*ln(r) - exp.im*theta + i*(exp.im*ln(r) + exp.re*theta)
+                        let w_ln_z = exp * log_base;
+
+                        // z^w = exp(w * ln(z))
+                        let result = w_ln_z.exp();
+
+                        // Check if result is NaN or infinite
+                        if result.re.is_nan() || result.im.is_nan() || result.re.is_infinite() || result.im.is_infinite() {
+                            // Return a safe value if result is problematic
+                            Ok(Complex::new(0.0, 0.0))
+                        } else if result.norm_sqr() > 1e100 {
+                            // For extremely large values, return a moderate value
+                            Ok(Complex::new(2.0, 0.0))
+                        } else {
+                            // For complex exponents in fractals, limit the result to prevent immediate bailout
                             let max_norm = 10.0; // Reasonable upper bound for fractal iteration
                             let current_norm = result.norm();
 
@@ -570,8 +583,6 @@ impl Expression for BinaryOp {
                             } else {
                                 Ok(result)
                             }
-                        } else {
-                            Ok(result)
                         }
                     }
                 }
@@ -1398,6 +1409,7 @@ pub fn julia_iterations(z: Complex<f64>, params: &FractalParams) -> u32 {
             Ok(result) => result,
             Err(_) => z * z + c, // Fallback to standard formula
         };
+
 
         if z.norm_sqr() > params.bailout * params.bailout {
             break;
