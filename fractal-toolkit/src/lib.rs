@@ -573,8 +573,10 @@ impl Expression for BinaryOp {
                             // For extremely large values, return a moderate value
                             Ok(Complex::new(2.0, 0.0))
                         } else {
-                            // For complex exponents in fractals, limit the result to prevent immediate bailout
-                            let max_norm = 10.0; // Reasonable upper bound for fractal iteration
+                            // For complex exponents in fractals, we need to be very conservative
+                            // to prevent immediate escape of all points
+                            // Use a much lower limit than before
+                            let max_norm = 2.0; // Very conservative for fractal iteration
                             let current_norm = result.norm();
 
                             if current_norm > max_norm {
