@@ -533,67 +533,45 @@ impl Expression for BinaryOp {
                         Ok(Complex::new(0.0, 0.0))
                     }
                 } else {
-                    // Check if the exponent has an imaginary component (complex exponent)
-                    if exp.im.abs() > 1e-10 {
-                        // For complex exponents in fractals, use a more stable approach
-                        // Complex exponents can cause immediate escape for all points
-                        // due to mathematical instabilities in the iteration
+                    // Use the proper mathematical formula: z^w = exp(w * ln(z))
+                    // where ln(z) = ln(|z|) + i*arg(z)
+                    let r = base.norm();  // |z|
+                    let theta = base.arg();  // arg(z), ensuring it's in the principal branch (-π, π]
 
-                        // Use the standard formula: z^w = exp(w * ln(z))
-                        let log_base = base.ln();
+                    // ln(z) = ln(r) + i*theta
+                    let log_base = Complex::new(r.ln(), theta);
 
-                        // Check if log_base is NaN or infinite
-                        if log_base.re.is_nan() || log_base.im.is_nan() || log_base.re.is_infinite() || log_base.im.is_infinite() {
-                            // Return a safe value if logarithm is problematic
-                            Ok(Complex::new(0.0, 0.0))
-                        } else {
-                            let result = (exp * log_base).exp();
+                    // w * ln(z) = (exp.re + i*exp.im) * (ln(r) + i*theta)
+                    // = exp.re*ln(r) - exp.im*theta + i*(exp.im*ln(r) + exp.re*theta)
+                    let w_ln_z = exp * log_base;
 
-                            // Check if result is NaN or infinite
-                            if result.re.is_nan() || result.im.is_nan() || result.re.is_infinite() || result.im.is_infinite() {
-                                // Return a safe value if result is problematic
-                                Ok(Complex::new(0.0, 0.0))
-                            } else {
-                                // For complex exponents in fractals, we need to be very conservative
-                                // The complex exponentiation often causes immediate escape
-                                // Use a more stable approach by limiting the effect
+                    // z^w = exp(w * ln(z))
+                    let result = w_ln_z.exp();
 
-                                // Calculate how far the result is from the original base
-                                // and dampen the effect to allow for fractal formation
-                                let original_norm = base.norm();
-                                let result_norm = result.norm();
-
-                                // If the result is much larger than the original, dampen it
-                                if result_norm > original_norm * 10.0 {
-                                    // Dampen the result to prevent immediate escape
-                                    let dampening_factor = (original_norm * 10.0) / result_norm.max(1e-10);
-                                    Ok(Complex::new(result.re * dampening_factor, result.im * dampening_factor))
-                                } else {
-                                    Ok(result)
-                                }
-                            }
-                        }
+                    // Check if result is NaN or infinite
+                    if result.re.is_nan() || result.im.is_nan() || result.re.is_infinite() || result.im.is_infinite() {
+                        // Return a safe value if result is problematic
+                        Ok(Complex::new(0.0, 0.0))
+                    } else if result.norm_sqr() > 1e100 {
+                        // For extremely large values, return a moderate value
+                        Ok(Complex::new(2.0, 0.0))
                     } else {
-                        // For real exponents, use the standard approach
-                        let log_base = base.ln();
+                        // For fractal generation, we need to be careful with complex exponents
+                        // that can cause immediate escape for all points
+                        // If the exponent has an imaginary component, we may need to be more conservative
+                        if exp.im.abs() > 1e-10 {
+                            // For complex exponents, limit the result to prevent immediate bailout
+                            let max_norm = 10.0; // Reasonable upper bound for fractal iteration
+                            let current_norm = result.norm();
 
-                        // Check if log_base is NaN or infinite
-                        if log_base.re.is_nan() || log_base.im.is_nan() || log_base.re.is_infinite() || log_base.im.is_infinite() {
-                            // Return a safe value if logarithm is problematic
-                            Ok(Complex::new(0.0, 0.0))
-                        } else {
-                            let result = (exp * log_base).exp();
-
-                            // Check if result is NaN or infinite
-                            if result.re.is_nan() || result.im.is_nan() || result.re.is_infinite() || result.im.is_infinite() {
-                                // Return a safe value if result is problematic
-                                Ok(Complex::new(0.0, 0.0))
-                            } else if result.norm_sqr() > 1e100 {
-                                // For extremely large values, return a moderate value
-                                Ok(Complex::new(2.0, 0.0))
+                            if current_norm > max_norm {
+                                let scale_factor = max_norm / current_norm;
+                                Ok(Complex::new(result.re * scale_factor, result.im * scale_factor))
                             } else {
                                 Ok(result)
                             }
+                        } else {
+                            Ok(result)
                         }
                     }
                 }
@@ -1385,6 +1363,7 @@ pub fn mandelbrot_iterations(c: Complex<f64>, params: &FractalParams) -> u32 {
             Ok(result) => result,
             Err(_) => z * z + c, // Fallback to standard formula
         };
+
 
         if z.norm_sqr() > params.bailout * params.bailout {
             break;
