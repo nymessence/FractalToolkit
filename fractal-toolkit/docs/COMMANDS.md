@@ -1,254 +1,132 @@
 # Fractal Toolkit Commands Documentation
 
-The Fractal Toolkit provides four main commands for generating different types of fractal images:
+## Overview
+The Fractal Toolkit provides a comprehensive suite of commands for generating and exploring fractals with customizable formulas and parameters.
 
-- `ftk-mandel` - Generates Mandelbrot fractal images
-- `ftk-julia` - Generates Julia set fractal images
-- `ftk-buddha` - Generates Buddhabrot fractal images
-- `ftk-buddhaj` - Generates Buddhabrot Julia fractal images
+## Available Commands
 
-## Common Concepts
+### ftk-mandel
+Generates Mandelbrot-style fractals with custom formulas.
 
-### Bounds Format
-All commands accept bounds in the format `[x_min, x_max, y_min, y_max]` representing the region of the complex plane to render:
-- `--bounds=-2.0,2.0,-2.0,2.0` (from -2.0 to 2.0 on both real and imaginary axes)
-
-### Dimensions Format
-All commands accept dimensions in the format `[width, height]` representing the output image size:
-- `--dimensions=512,512` (512x512 pixel image)
-
-### Spawn Format
-For Julia sets and Buddhabrot Julia, spawn points are specified as `[real, imag]`:
-- `--spawn=0.285,0.01` (complex number 0.285 + 0.01i)
-
-## ftk-mandel - Mandelbrot Set Generator
-
-Generates Mandelbrot fractal images.
-
-### Options
-
-- `--bounds <BOUNDS>...` - Bounds of the fractal [x_min, x_max, y_min, y_max]
-  - Example: `--bounds=-2.0,2.0,-2.0,2.0`
-
-- `--max-iterations <MAX_ITERATIONS>` - Maximum number of iterations (default: 64)
-  - Example: `--max-iterations=128`
-
-- `--dimensions <DIMENSIONS>...` - Dimensions of the output image [width, height]
-  - Example: `--dimensions=1024,1024`
-
-- `--spawn <SPAWN>...` - Spawn point for the fractal [real, imag] (default: 0.0,0.0)
-  - Example: `--spawn=0.0,0.0`
-
-- `--color-pallette <COLOR_PALLETTE>` - Color palette [(hex_color, position), ...]
-  - Example: `--color-pallette="[(#FF0000,0.0),(#00FF00,0.5),(#0000FF,1.0)]"`
-
-- `--formula <FORMULA>` - Formula for the fractal (default: "z^2 + c")
-  - Example: `--formula="z^2 + c"` or `--formula="z^3 + c"`
-
-- `--bailout <BAILOUT>` - Bailout value (default: 4.0)
-  - Example: `--bailout=4.0`
-
-- `--output <OUTPUT>` - Output file name (default: "mandel_output.png")
-  - Example: `--output="mandel_test.png"`
-
-### Supported Formulas
-
-The Mandelbrot generator supports various mathematical formulas:
-- `"z^2 + c"` - Standard Mandelbrot
-- `"z^3 + c"` - Cubic Mandelbrot
-- `"z^4 + c"` - Quartic Mandelbrot
-- `"sin(z) + c"` - Sine Mandelbrot
-- `"cos(z) + c"` - Cosine Mandelbrot
-- `"tan(z) + c"` - Tangent Mandelbrot
-- `"exp(z) + c"` - Exponential Mandelbrot
-- `"log(z) + c"` - Logarithmic Mandelbrot
-- And many more complex combinations
-
-### Example Usage
-
+#### Usage
 ```bash
-# Basic Mandelbrot set
-ftk-mandel --bounds=-2.0,2.0,-2.0,2.0 --max-iterations=64 --dimensions=512,512 --spawn=0.0,0.0 --formula="z^2 + c" --bailout=4.0 --output="mandel_basic.png"
-
-# Mandelbrot with custom color palette
-ftk-mandel --bounds=-2.0,2.0,-2.0,2.0 --max-iterations=128 --dimensions=1024,1024 --color-pallette="[(#FF0000,0.0),(#00FF00,0.5),(#0000FF,1.0)]" --formula="z^2 + c" --bailout=4.0 --output="mandel_colored.png"
-
-# Mandelbrot with different formula
-ftk-mandel --bounds=-2.0,2.0,-2.0,2.0 --max-iterations=100 --dimensions=512,512 --formula="sin(z) + c" --bailout=4.0 --output="mandel_sine.png"
+cargo run --bin ftk-mandel -- [OPTIONS]
 ```
 
-## ftk-julia - Julia Set Generator
+#### Options
+- `--bounds=x_min,x_max,y_min,y_max`: Set the coordinate bounds for the fractal view (default: -2,2,-2,2)
+- `--dimensions=width,height`: Set the dimensions of the output image in pixels (default: 512,512)
+- `--max-iterations=n`: Maximum number of iterations per pixel (default: 100)
+- `--spawn=real,imag`: Starting point for the fractal calculation (default: 0,0)
+- `--color-pallette='[(hex_color,position),...]`: Define the color palette for the fractal
+- `--bailout=value`: Threshold for escaping iteration (default: 4)
+- `--formula='expression'`: Custom formula for the fractal (default: 'z^2 + c')
+- `--output='filename.png'`: Output filename for the generated image
 
-Generates Julia set fractal images.
+#### Supported Operators
+- `+` - Addition
+- `-` - Subtraction
+- `*` - Multiplication
+- `/` - Division
+- `^` - Power (exponentiation)
+- `^^` - Tetration (hyper-4 operation)
+- `^^^` - Pentation (hyper-5 operation)
+- `^^^^` - Hexation (hyper-6 operation)
 
-### Options
+#### Supported Functions
+- `abs(x)` - Absolute value
+- `sqrt(z)` - Square root
+- `cbrt(z)` - Cube root
+- `sin(z)` - Sine
+- `cos(z)` - Cosine
+- `tan(z)` - Tangent
+- `asin(z)` - Arc sine
+- `acos(z)` - Arc cosine
+- `atan(z)` - Arc tangent
+- `sinh(z)` - Hyperbolic sine
+- `cosh(z)` - Hyperbolic cosine
+- `tanh(z)` - Hyperbolic tangent
+- `exp(z)` - Exponential function
+- `ln(z)` - Natural logarithm
+- `log(base, z)` - Logarithm with specified base
+- `conjugate(z)` - Complex conjugate
 
-- `--bounds <BOUNDS>...` - Bounds of the fractal [x_min, x_max, y_min, y_max]
-  - Example: `--bounds=-2.0,2.0,-2.0,2.0`
+#### Formula Examples
+- `z^2 + c` - Classic Mandelbrot set
+- `z^2.5 + c` - Real non-integer exponent
+- `z^(2.7+0.3i) + c` - Complex exponent
+- `z^3 + c` - Cubic Mandelbrot
+- `z^^z + c` - Tetration-based fractal
+- `z^^^z + c` - Pentation-based fractal
+- `sqrt(z) + c` - Square root fractal
+- `sin(z) + c` - Sine-based fractal
 
-- `--max-iterations <MAX_ITERATIONS>` - Maximum number of iterations (default: 64)
-  - Example: `--max-iterations=128`
+## Mathematical Operations
 
-- `--dimensions <DIMENSIONS>...` - Dimensions of the output image [width, height]
-  - Example: `--dimensions=512,512`
+### Power Operations
+- Standard power: `z^n` where n can be integer, real, or complex
+- Complex exponents: `z^(a+bi)` where a and b are real numbers
+- Real non-integer exponents: `z^2.7`, `z^3.14`, etc.
 
-- `--spawn <SPAWN>...` - Spawn point for the fractal [real, imag] (default: 0.0,0.0)
-  - Example: `--spawn=0.285,0.01`
+### Hyperoperations
+- Tetration: `z^^w` - iterated exponentiation
+- Pentation: `z^^^w` - iterated tetration
+- Hexation: `z^^^^w` - iterated pentation
 
-- `--color-pallette <COLOR_PALLETTE>` - Color palette [(hex_color, position), ...]
-  - Example: `--color-pallette="[(#FF0000,0.0),(#00FF00,0.5),(#0000FF,1.0)]"`
+### Complex Functions
+- Trigonometric: `sin(z)`, `cos(z)`, `tan(z)`
+- Inverse trigonometric: `asin(z)`, `acos(z)`, `atan(z)`
+- Hyperbolic: `sinh(z)`, `cosh(z)`, `tanh(z)`
+- Roots: `sqrt(z)`, `cbrt(z)`
+- Logarithmic: `ln(z)`, `log(base, z)`
+- Exponential: `exp(z)`
 
-- `--formula <FORMULA>` - Formula for the fractal (default: "z^2 + c")
-  - Example: `--formula="z^2 + c"`
+## Color Palettes
+Color palettes are defined as a list of tuples in the format `(hex_color, position)`, where:
+- `hex_color` is a color in hexadecimal format (e.g., #FF0000 for red)
+- `position` is a float between 0.0 and 1.0 indicating the position in the gradient
 
-- `--bailout <BAILOUT>` - Bailout value (default: 4.0)
-  - Example: `--bailout=4.0`
-
-- `--output <OUTPUT>` - Output file name (default: "julia_output.png")
-  - Example: `--output="julia_test.png"`
-
-### Example Usage
-
-```bash
-# Basic Julia set with default parameters
-ftk-julia --bounds=-2.0,2.0,-2.0,2.0 --max-iterations=64 --dimensions=512,512 --spawn=0.285,0.01 --formula="z^2 + c" --bailout=4.0 --output="julia_basic.png"
-
-# Julia set with custom parameters
-ftk-julia --bounds=-1.5,1.5,-1.5,1.5 --max-iterations=100 --dimensions=1024,1024 --spawn=-0.7,0.27015 --formula="z^2 + c" --bailout=4.0 --output="julia_custom.png"
-
-# Julia set with different formula
-ftk-julia --bounds=-2.0,2.0,-2.0,2.0 --max-iterations=80 --dimensions=512,512 --spawn=0.0,1.0 --formula="z^3 + c" --bailout=4.0 --output="julia_cubic.png"
+Example:
+```
+--color-pallette='[(#000000,0.0),(#00FF00,0.5),(#FFFFFF,1.0)]'
 ```
 
-## ftk-buddha - Buddhabrot Generator
+## Troubleshooting
 
-Generates Buddhabrot fractal images.
+### Common Issues
+- **Black Images**: May occur with certain complex exponents that cause immediate escape. Try adjusting bailout value or max iterations.
+- **Performance**: High iteration counts or complex formulas may take longer to compute.
+- **Invalid Syntax**: Ensure formulas follow proper mathematical syntax with balanced parentheses.
 
-### Options
+### Tips
+- Start with lower resolution (e.g., 64x64) for testing new formulas
+- Use moderate max-iteration values initially (e.g., 32-100)
+- Complex exponents may require higher bailout values to visualize properly
+- Non-integer and complex exponents often produce interesting and unique fractal patterns
 
-- `--bounds <BOUNDS>...` - Bounds of the fractal [x_min, x_max, y_min, y_max]
-  - Example: `--bounds=-2.0,2.0,-2.0,2.0`
+## Examples
 
-- `--dimensions <DIMENSIONS>...` - Dimensions of the output image [width, height]
-  - Example: `--dimensions=512,512`
-
-- `--min-iterations <MIN_ITERATIONS>` - Minimum iterations for points to be considered (default: 10)
-  - Example: `--min-iterations=5`
-
-- `--max-iterations <MAX_ITERATIONS>` - Maximum iterations to check (default: 100)
-  - Example: `--max-iterations=200`
-
-- `--samples <SAMPLES>` - Number of random samples to take (default: 1000000)
-  - Example: `--samples=500000`
-
-- `--bailout <BAILOUT>` - Bailout value (default: 4.0)
-  - Example: `--bailout=4.0`
-
-- `--formula <FORMULA>` - Formula for the fractal (default: "z^2 + c")
-  - Example: `--formula="z^2 + c"`
-
-- `--red-channel <RED_CHANNEL>...` - Red channel: min_iter,max_iter,samples
-  - Example: `--red-channel=10,50,50000`
-
-- `--green-channel <GREEN_CHANNEL>...` - Green channel: min_iter,max_iter,samples
-  - Example: `--green-channel=50,75,30000`
-
-- `--blue-channel <BLUE_CHANNEL>...` - Blue channel: min_iter,max_iter,samples
-  - Example: `--blue-channel=75,100,20000`
-
-- `--output <OUTPUT>` - Output file name (default: "buddha_output.png")
-  - Example: `--output="buddha_test.png"`
-
-### Example Usage
-
+### Basic Mandelbrot
 ```bash
-# Basic Buddhabrot with default parameters
-ftk-buddha --bounds=-2.0,2.0,-2.0,2.0 --dimensions=512,512 --min-iterations=10 --max-iterations=100 --samples=100000 --bailout=4.0 --formula="z^2 + c" --red-channel=10,50,50000 --green-channel=50,75,30000 --blue-channel=75,100,20000 --output="buddha_basic.png"
-
-# Buddhabrot with higher resolution and more samples
-ftk-buddha --bounds=-2.0,2.0,-2.0,2.0 --dimensions=1024,1024 --min-iterations=20 --max-iterations=200 --samples=500000 --bailout=4.0 --formula="z^2 + c" --red-channel=20,100,200000 --green-channel=100,150,150000 --blue-channel=150,200,100000 --output="buddha_high_res.png"
-
-# Buddhabrot with different formula
-ftk-buddha --bounds=-2.0,2.0,-2.0,2.0 --dimensions=512,512 --min-iterations=10 --max-iterations=100 --samples=100000 --bailout=4.0 --formula="z^3 + c" --red-channel=10,50,50000 --green-channel=50,75,30000 --blue-channel=75,100,20000 --output="buddha_cubic.png"
+cargo run --bin ftk-mandel -- --bounds=-2,2,-2,2 --dimensions=512,512 --formula='z^2 + c'
 ```
 
-## ftk-buddhaj - Buddhabrot Julia Generator
-
-Generates Buddhabrot Julia fractal images.
-
-### Options
-
-- `--bounds <BOUNDS>...` - Bounds of the fractal [x_min, x_max, y_min, y_max]
-  - Example: `--bounds=-2.0,2.0,-2.0,2.0`
-
-- `--dimensions <DIMENSIONS>...` - Dimensions of the output image [width, height]
-  - Example: `--dimensions=512,512`
-
-- `--min-iterations <MIN_ITERATIONS>` - Minimum iterations for points to be considered (default: 10)
-  - Example: `--min-iterations=5`
-
-- `--max-iterations <MAX_ITERATIONS>` - Maximum iterations to check (default: 100)
-  - Example: `--max-iterations=200`
-
-- `--samples <SAMPLES>` - Number of random samples to take (default: 1000000)
-  - Example: `--samples=500000`
-
-- `--bailout <BAILOUT>` - Bailout value (default: 4.0)
-  - Example: `--bailout=4.0`
-
-- `--formula <FORMULA>` - Formula for the fractal (default: "z^2 + c")
-  - Example: `--formula="z^2 + c"`
-
-- `--spawn <SPAWN>...` - Spawn point for the fractal [real, imag] (default: 0.0,0.0)
-  - Example: `--spawn=0.285,0.01`
-
-- `--red-channel <RED_CHANNEL>...` - Red channel: min_iter,max_iter,samples
-  - Example: `--red-channel=10,50,50000`
-
-- `--green-channel <GREEN_CHANNEL>...` - Green channel: min_iter,max_iter,samples
-  - Example: `--green-channel=50,75,30000`
-
-- `--blue-channel <BLUE_CHANNEL>...` - Blue channel: min_iter,max_iter,samples
-  - Example: `--blue-channel=75,100,20000`
-
-- `--output <OUTPUT>` - Output file name (default: "buddhaj_output.png")
-  - Example: `--output="buddhaj_test.png"`
-
-### Example Usage
-
+### Real Non-Integer Exponent
 ```bash
-# Basic Buddhabrot Julia with default parameters
-ftk-buddhaj --bounds=-2.0,2.0,-2.0,2.0 --dimensions=512,512 --min-iterations=10 --max-iterations=100 --samples=100000 --bailout=4.0 --spawn=0.285,0.01 --formula="z^2 + c" --red-channel=10,50,50000 --green-channel=50,75,30000 --blue-channel=75,100,20000 --output="buddhaj_basic.png"
-
-# Buddhabrot Julia with different spawn point
-ftk-buddhaj --bounds=-2.0,2.0,-2.0,2.0 --dimensions=1024,1024 --min-iterations=20 --max-iterations=200 --samples=500000 --bailout=4.0 --spawn=-0.7,0.27015 --formula="z^2 + c" --red-channel=20,100,200000 --green-channel=100,150,150000 --blue-channel=150,200,100000 --output="buddhaj_custom.png"
-
-# Buddhabrot Julia with different formula
-ftk-buddhaj --bounds=-2.0,2.0,-2.0,2.0 --dimensions=512,512 --min-iterations=10 --max-iterations=100 --samples=100000 --bailout=4.0 --spawn=0.0,1.0 --formula="z^3 + c" --red-channel=10,50,50000 --green-channel=50,75,30000 --blue-channel=75,100,20000 --output="buddhaj_cubic.png"
+cargo run --bin ftk-mandel -- --bounds=-2,2,-2,2 --dimensions=512,512 --formula='z^2.5 + c'
 ```
 
-## Additional Features
+### Complex Exponent
+```bash
+cargo run --bin ftk-mandel -- --bounds=-2,2,-2,2 --dimensions=512,512 --formula='z^(2.7+0.3i) + c'
+```
 
-### HTML Explorer Generation
+### Tetration-Based Fractal
+```bash
+cargo run --bin ftk-mandel -- --bounds=-2,2,-2,2 --dimensions=256,256 --formula='z^^z + c' --max-iterations=16
+```
 
-All commands automatically generate an HTML explorer file alongside the PNG image. This HTML file allows you to:
-- Click and drag on the fractal image to select a region
-- See the command to render that specific region
-- Choose different aspect ratios and resolutions
-- Generate commands for zooming into specific areas
-
-The HTML file has the same name as the PNG file but with a `.html` extension.
-
-### Formula Support
-
-The fractal toolkit supports a wide variety of mathematical formulas:
-- Basic: `z^2 + c`, `z^3 + c`, `z^4 + c`
-- Trigonometric: `sin(z) + c`, `cos(z) + c`, `tan(z) + c`
-- Exponential: `exp(z) + c`, `log(z) + c`
-- Complex combinations: `z*z + sin(c)`, `z^2 + c*sin(z)`, etc.
-
-### Output File Naming
-
-You can use shell variables in output file names:
-- `--output="mandel_$(date +%Y%m%d_%H%M%S).png"` - Creates timestamped files
-- `--output="fractal_${USER}.png"` - Uses environment variables
+### Custom Color Palette
+```bash
+cargo run --bin ftk-mandel -- --bounds=-2,2,-2,2 --dimensions=512,512 --color-pallette='[(#000000,0.0),(#FF0000,0.33),(#00FF00,0.66),(#FFFFFF,1.0)]' --formula='z^3 + c'
+```

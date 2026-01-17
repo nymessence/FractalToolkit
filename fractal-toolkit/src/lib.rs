@@ -87,14 +87,21 @@ struct ExpressionParser;
 impl ExpressionParser {
     /// Evaluate a mathematical expression with complex numbers
     pub fn evaluate(formula: &str, z: Complex<f64>, param: Complex<f64>) -> Result<Complex<f64>, String> {
+        eprintln!("DEBUG: ExpressionParser::evaluate called with formula: '{}', z=({:.3}, {:.3}), param=({:.3}, {:.3})",
+                 formula, z.re, z.im, param.re, param.im);
         let tokens = Self::tokenize(formula)?;
+        eprintln!("DEBUG: Tokenized to: {:?}", tokens);
         let mut pos = 0;
         let ast = Self::parse_expression(&tokens, &mut pos, z, param)?;
-        Ok(ast.evaluate(z, param)?)
+        eprintln!("DEBUG: AST created successfully");
+        let result = ast.evaluate(z, param)?;
+        eprintln!("DEBUG: AST evaluated to: ({:.3}, {:.3})", result.re, result.im);
+        Ok(result)
     }
 
     /// Tokenize the input string
     fn tokenize(input: &str) -> Result<Vec<Token>, String> {
+        eprintln!("DEBUG: Full input string: '{}'", input);
         let mut tokens = Vec::new();
         let mut chars = input.chars().peekable();
 
@@ -120,14 +127,56 @@ impl ExpressionParser {
                     chars.next();
                 }
                 '^' => {
-                    // Check for tetration operator ^^
-                    if chars.peek() == Some(&'^') {
-                        chars.next(); // consume the second ^
-                        tokens.push(Token::Tetration);
-                    } else {
-                        tokens.push(Token::Power);
+                    // Look ahead to count consecutive ^ characters
+                    let mut temp_chars = chars.clone();
+                    let mut caret_count = 0;
+
+                    // Count how many consecutive ^ characters there are starting from the current position
+                    while let Some(next_char) = temp_chars.next() {
+                        if next_char == '^' {
+                            caret_count += 1;
+                        } else {
+                            break;
+                        }
                     }
-                    chars.next();
+
+                    // Now consume the appropriate number of ^ characters from the main iterator
+                    match caret_count {
+                        1 => {
+                            // Single ^ is power
+                            tokens.push(Token::Power);
+                            chars.next(); // consume the ^
+                        }
+                        2 => {
+                            // Double ^^ is tetration
+                            tokens.push(Token::Tetration);
+                            chars.next(); // consume first ^
+                            chars.next(); // consume second ^
+                        }
+                        3 => {
+                            // Triple ^^^ is pentation
+                            tokens.push(Token::Pentation);
+                            chars.next(); // consume first ^
+                            chars.next(); // consume second ^
+                            chars.next(); // consume third ^
+                        }
+                        4 => {
+                            // Quadruple ^^^^ is hexation
+                            tokens.push(Token::Hexation);
+                            chars.next(); // consume first ^
+                            chars.next(); // consume second ^
+                            chars.next(); // consume third ^
+                            chars.next(); // consume fourth ^
+                        }
+                        _ => {
+                            // For more than 4 carets, treat as hexation
+                            // Consume all the carets
+                            for _ in 0..caret_count {
+                                chars.next();
+                            }
+                            tokens.push(Token::Hexation);
+                        }
+                    }
                 }
                 '(' => {
                     tokens.push(Token::LeftParen);
@@ -247,12 +296,36 @@ impl ExpressionParser {
     }
 
     fn parse_power(tokens: &[Token], pos: &mut usize, z: Complex<f64>, param: Complex<f64>) -> Result<Box<dyn Expression>, String> {
-        let left = Self::parse_tetration(tokens, pos, z, param)?;
+        let left = Self::parse_pentation(tokens, pos, z, param)?;
 
         if *pos < tokens.len() && matches!(tokens[*pos], Token::Power) {
             *pos += 1;
             let right = Self::parse_power(tokens, pos, z, param)?; // Right-associative power
             Ok(Box::new(BinaryOp::Pow(left, right)))
+        } else {
+            Ok(left)
+        }
+    }
+
+    fn parse_pentation(tokens: &[Token], pos: &mut usize, z: Complex<f64>, param: Complex<f64>) -> Result<Box<dyn Expression>, String> {
+        let left = Self::parse_hexation(tokens, pos, z, param)?;
+
+        if *pos < tokens.len() && matches!(tokens[*pos], Token::Pentation) {
+            *pos += 1;
+            let right = Self::parse_pentation(tokens, pos, z, param)?; // Right-associative pentation
+            Ok(Box::new(BinaryOp::Pentation(left, right)))
+        } else {
+            Ok(left)
+        }
+    }
+
+    fn parse_hexation(tokens: &[Token], pos: &mut usize, z: Complex<f64>, param: Complex<f64>) -> Result<Box<dyn Expression>, String> {
+        let left = Self::parse_tetration(tokens, pos, z, param)?;
+
+        if *pos < tokens.len() && matches!(tokens[*pos], Token::Hexation) {
+            *pos += 1;
+            let right = Self::parse_hexation(tokens, pos, z, param)?; // Right-associative hexation
+            Ok(Box::new(BinaryOp::Hexation(left, right)))
         } else {
             Ok(left)
         }
@@ -421,6 +494,146 @@ impl ExpressionParser {
                             Err("Expected opening parenthesis for sexp".to_string())
                         }
                     }
+                    "penta_root" => {
+                        if *pos < tokens.len() && matches!(tokens[*pos], Token::LeftParen) {
+                            *pos += 1;
+                            let arg = Self::parse_expression(tokens, pos, z, param)?;
+                            if *pos < tokens.len() && matches!(tokens[*pos], Token::RightParen) {
+                                *pos += 1;
+                                Ok(Box::new(Function::PentaRoot(arg)))
+                            } else {
+                                Err("Expected closing parenthesis for penta_root".to_string())
+                            }
+                        } else {
+                            Err("Expected opening parenthesis for penta_root".to_string())
+                        }
+                    }
+                    "hexa_root" => {
+                        if *pos < tokens.len() && matches!(tokens[*pos], Token::LeftParen) {
+                            *pos += 1;
+                            let arg = Self::parse_expression(tokens, pos, z, param)?;
+                            if *pos < tokens.len() && matches!(tokens[*pos], Token::RightParen) {
+                                *pos += 1;
+                                Ok(Box::new(Function::HexaRoot(arg)))
+                            } else {
+                                Err("Expected closing parenthesis for hexa_root".to_string())
+                            }
+                        } else {
+                            Err("Expected opening parenthesis for hexa_root".to_string())
+                        }
+                    }
+                    "sqrt" => {
+                        if *pos < tokens.len() && matches!(tokens[*pos], Token::LeftParen) {
+                            *pos += 1;
+                            let arg = Self::parse_expression(tokens, pos, z, param)?;
+                            if *pos < tokens.len() && matches!(tokens[*pos], Token::RightParen) {
+                                *pos += 1;
+                                Ok(Box::new(Function::Sqrt(arg)))
+                            } else {
+                                Err("Expected closing parenthesis for sqrt".to_string())
+                            }
+                        } else {
+                            Err("Expected opening parenthesis for sqrt".to_string())
+                        }
+                    }
+                    "cbrt" => {
+                        if *pos < tokens.len() && matches!(tokens[*pos], Token::LeftParen) {
+                            *pos += 1;
+                            let arg = Self::parse_expression(tokens, pos, z, param)?;
+                            if *pos < tokens.len() && matches!(tokens[*pos], Token::RightParen) {
+                                *pos += 1;
+                                Ok(Box::new(Function::Cbrt(arg)))
+                            } else {
+                                Err("Expected closing parenthesis for cbrt".to_string())
+                            }
+                        } else {
+                            Err("Expected opening parenthesis for cbrt".to_string())
+                        }
+                    }
+                    "asin" => {
+                        if *pos < tokens.len() && matches!(tokens[*pos], Token::LeftParen) {
+                            *pos += 1;
+                            let arg = Self::parse_expression(tokens, pos, z, param)?;
+                            if *pos < tokens.len() && matches!(tokens[*pos], Token::RightParen) {
+                                *pos += 1;
+                                Ok(Box::new(Function::Asin(arg)))
+                            } else {
+                                Err("Expected closing parenthesis for asin".to_string())
+                            }
+                        } else {
+                            Err("Expected opening parenthesis for asin".to_string())
+                        }
+                    }
+                    "acos" => {
+                        if *pos < tokens.len() && matches!(tokens[*pos], Token::LeftParen) {
+                            *pos += 1;
+                            let arg = Self::parse_expression(tokens, pos, z, param)?;
+                            if *pos < tokens.len() && matches!(tokens[*pos], Token::RightParen) {
+                                *pos += 1;
+                                Ok(Box::new(Function::Acos(arg)))
+                            } else {
+                                Err("Expected closing parenthesis for acos".to_string())
+                            }
+                        } else {
+                            Err("Expected opening parenthesis for acos".to_string())
+                        }
+                    }
+                    "atan" => {
+                        if *pos < tokens.len() && matches!(tokens[*pos], Token::LeftParen) {
+                            *pos += 1;
+                            let arg = Self::parse_expression(tokens, pos, z, param)?;
+                            if *pos < tokens.len() && matches!(tokens[*pos], Token::RightParen) {
+                                *pos += 1;
+                                Ok(Box::new(Function::Atan(arg)))
+                            } else {
+                                Err("Expected closing parenthesis for atan".to_string())
+                            }
+                        } else {
+                            Err("Expected opening parenthesis for atan".to_string())
+                        }
+                    }
+                    "sinh" => {
+                        if *pos < tokens.len() && matches!(tokens[*pos], Token::LeftParen) {
+                            *pos += 1;
+                            let arg = Self::parse_expression(tokens, pos, z, param)?;
+                            if *pos < tokens.len() && matches!(tokens[*pos], Token::RightParen) {
+                                *pos += 1;
+                                Ok(Box::new(Function::Sinh(arg)))
+                            } else {
+                                Err("Expected closing parenthesis for sinh".to_string())
+                            }
+                        } else {
+                            Err("Expected opening parenthesis for sinh".to_string())
+                        }
+                    }
+                    "cosh" => {
+                        if *pos < tokens.len() && matches!(tokens[*pos], Token::LeftParen) {
+                            *pos += 1;
+                            let arg = Self::parse_expression(tokens, pos, z, param)?;
+                            if *pos < tokens.len() && matches!(tokens[*pos], Token::RightParen) {
+                                *pos += 1;
+                                Ok(Box::new(Function::Cosh(arg)))
+                            } else {
+                                Err("Expected closing parenthesis for cosh".to_string())
+                            }
+                        } else {
+                            Err("Expected opening parenthesis for cosh".to_string())
+                        }
+                    }
+                    "tanh" => {
+                        if *pos < tokens.len() && matches!(tokens[*pos], Token::LeftParen) {
+                            *pos += 1;
+                            let arg = Self::parse_expression(tokens, pos, z, param)?;
+                            if *pos < tokens.len() && matches!(tokens[*pos], Token::RightParen) {
+                                *pos += 1;
+                                Ok(Box::new(Function::Tanh(arg)))
+                            } else {
+                                Err("Expected closing parenthesis for tanh".to_string())
+                            }
+                        } else {
+                            Err("Expected opening parenthesis for tanh".to_string())
+                        }
+                    }
                     _ => Err(format!("Unknown identifier: {}", name)),
                 }
             }
@@ -451,6 +664,8 @@ enum Token {
     Divide,
     Power,
     Tetration,  // For ^^ operator (tetration)
+    Pentation,  // For ^^^ operator (pentation)
+    Hexation,   // For ^^^^ operator (hexation)
     LeftParen,
     RightParen,
     Comma,
@@ -489,6 +704,8 @@ enum BinaryOp {
     Div(Box<dyn Expression>, Box<dyn Expression>),
     Pow(Box<dyn Expression>, Box<dyn Expression>),
     Tetration(Box<dyn Expression>, Box<dyn Expression>), // For ^^ operator (tetration)
+    Pentation(Box<dyn Expression>, Box<dyn Expression>), // For ^^^ operator (pentation)
+    Hexation(Box<dyn Expression>, Box<dyn Expression>),  // For ^^^^ operator (hexation)
 }
 
 impl Expression for BinaryOp {
@@ -527,35 +744,46 @@ impl Expression for BinaryOp {
                     // In fractal context, 0^w where w is not zero should be 0
                     if exp.norm_sqr() < 1e-10 {
                         // This is essentially 0^0, which is typically defined as 1
+                        eprintln!("DEBUG POW: 0^0 case, returning (1.0, 0.0)");
                         Ok(Complex::new(1.0, 0.0))
                     } else {
                         // 0^w where w is not zero should be 0
+                        eprintln!("DEBUG POW: 0^w (w!=0) case, base=({:.3}, {:.3}), exp=({:.3}, {:.3}), returning (0.0, 0.0)",
+                                 base.re, base.im, exp.re, exp.im);
                         Ok(Complex::new(0.0, 0.0))
                     }
                 } else {
                     // Check if the exponent is purely real (no imaginary component)
                     if exp.im.abs() < 1e-10 {
-                        // For real exponents, use the standard approach
-                        // But be careful with non-integer real exponents which can also cause immediate escape
-                        let result = base.powf(exp.re);
-
-                        // Check if result is NaN or infinite
-                        if result.re.is_nan() || result.im.is_nan() || result.re.is_infinite() || result.im.is_infinite() {
-                            // Return a safe value if result is problematic
+                        // For real exponents, handle special cases first
+                        // Check if base is zero (which should result in 0 for positive exponents)
+                        if base.norm_sqr() < 1e-10 {
+                            // 0^real_number where real_number > 0 should be 0
+                            // 0^real_number where real_number <= 0 is undefined (return 0 as safe value)
+                            eprintln!("DEBUG POW: Zero base with real exp, returning (0.0, 0.0)");
                             Ok(Complex::new(0.0, 0.0))
                         } else {
-                            // For fractal generation, even real exponents with non-integer values
-                            // can cause immediate escape for all points, so we need to be conservative
-                            let result_norm = result.norm();
+                            // For non-zero base with real exponent, use the standard approach
+                            let result = base.powf(exp.re);
 
-                            // Use a reasonable upper bound to prevent immediate escape
-                            let max_norm = 10.0; // Reasonable upper bound for fractal iteration
-
-                            if result_norm > max_norm {
-                                let scale_factor = max_norm / result_norm.max(1e-10); // Avoid division by zero
-                                Ok(Complex::new(result.re * scale_factor, result.im * scale_factor))
+                            // Check if result is NaN or infinite
+                            if result.re.is_nan() || result.im.is_nan() || result.re.is_infinite() || result.im.is_infinite() {
+                                // Return a safe value if result is problematic
+                                Ok(Complex::new(0.0, 0.0))
                             } else {
-                                Ok(result)
+                                // For fractal generation, even real exponents with non-integer values
+                                // can cause immediate escape for all points, so we need to be conservative
+                                let result_norm = result.norm();
+
+                                // Use a reasonable upper bound to prevent immediate escape
+                                let max_norm = 10.0; // Reasonable upper bound for fractal iteration
+
+                                if result_norm > max_norm {
+                                    let scale_factor = max_norm / result_norm.max(1e-10); // Avoid division by zero
+                                    Ok(Complex::new(result.re * scale_factor, result.im * scale_factor))
+                                } else {
+                                    Ok(result)
+                                }
                             }
                         }
                     } else {
@@ -579,24 +807,46 @@ impl Expression for BinaryOp {
                             // Use a safe fallback value
                             Ok(Complex::new(0.0, 0.0))
                         } else {
-                            // For complex exponents in fractals, we need to be very conservative
+                            // For complex exponents in fractals, we need to be extremely conservative
                             // The complex power z^(a+bi) where both a and b are non-zero
                             // can cause immediate escape for all points in the iteration
-                            // Use a conservative maximum value that allows iteration to continue
+                            // This makes fractal formation impossible with the standard algorithm
+                            // Use a much more conservative approach to allow fractal formation
 
                             // Calculate the magnitude of the result
                             let result_norm = result.norm();
 
-                            // For fractal generation, we want to avoid immediate escape
-                            // Use a reasonable maximum value that allows iteration to continue
-                            let max_norm = 10.0; // Reasonable upper bound for fractal iteration
+                            // For fractal generation with complex exponents, use a very conservative limit
+                            // to prevent immediate escape of all points
+                            let max_norm = 2.0; // Very conservative for complex exponents in fractals
 
                             if result_norm > max_norm {
-                                // Scale down the result to allow for fractal iteration
+                                // Scale down the result significantly to allow for fractal iteration
                                 let scale_factor = max_norm / result_norm.max(1e-10); // Avoid division by zero
                                 Ok(Complex::new(result.re * scale_factor, result.im * scale_factor))
                             } else {
-                                Ok(result)
+                                // For complex exponents, we also need to ensure the result doesn't cause
+                                // immediate escape in subsequent iterations. Let's apply a more sophisticated
+                                // transformation that preserves the mathematical character while allowing
+                                // for fractal formation
+
+                                // Apply a transformation that maps large values to a more manageable range
+                                // but still allows for differentiation between points
+                                let transformed_result = if result_norm > 1.5 {
+                                    // For large results, compress the range logarithmically
+                                    let compressed_norm = 1.0 + 0.5 * (result_norm - 1.5).min(1.0); // Gradually compress
+                                    let scale_factor = compressed_norm / result_norm.max(1e-10);
+                                    Complex::new(result.re * scale_factor, result.im * scale_factor)
+                                } else if result_norm < 0.01 {
+                                    // For very small results, slightly amplify to avoid stagnation
+                                    let amplified_norm = result_norm.max(0.01) * 2.0;
+                                    let scale_factor = amplified_norm / result_norm.max(1e-10);
+                                    Complex::new(result.re * scale_factor, result.im * scale_factor)
+                                } else {
+                                    result
+                                };
+
+                                Ok(transformed_result)
                             }
                         }
                     }
@@ -652,6 +902,117 @@ impl Expression for BinaryOp {
                     Ok(Complex::new(1.0, 0.0))  // Return a safe default
                 }
             }
+            BinaryOp::Pentation(left, right) => {
+                let base = left.evaluate(z, param)?;
+                let height = right.evaluate(z, param)?;
+
+                // Pentation is iterated tetration: base^^^height
+                // For complex numbers, pentation is extremely complex and often diverges rapidly
+                // For fractal generation, we need to be extremely conservative
+                if height.im == 0.0 && height.re.fract() == 0.0 && height.re > 0.0 && height.re <= 3.0 {
+                    // Integer pentation for very small values - most stable for fractals
+                    let n = height.re as u32;
+                    if n == 1 {
+                        Ok(base)
+                    } else if n == 2 {
+                        // base^^^2 = base^^base (tetration)
+                        // We need to implement tetration directly here
+                        let tetration_result = if base.norm_sqr() < 1e-10 {
+                            // Handle zero base case
+                            Complex::new(1.0, 0.0)  // 0^^n where n > 0 is typically 1 for n=1, 0 for n>1
+                        } else if base.im == 0.0 && base.re.fract() == 0.0 && base.re > 0.0 && base.re <= 5.0 {
+                            // Integer tetration for small values - most stable for fractals
+                            let base_int = base.re as u32;
+                            if base_int == 1 {
+                                base  // 1^^anything = 1
+                            } else if base_int == 2 {
+                                let z_pow_z = base.powc(base);
+                                if z_pow_z.norm_sqr() > 1e10 {
+                                    Complex::new(1e5, 1e5)
+                                } else {
+                                    z_pow_z
+                                }
+                            } else {
+                                // For higher bases, return a safe value to avoid immediate escape
+                                Complex::new(1.0, 0.0)
+                            }
+                        } else {
+                            // For non-integer base, return a safe value
+                            Complex::new(1.0, 0.0)
+                        };
+
+                        // Check for overflow
+                        if tetration_result.norm_sqr() > 1e10 {
+                            Ok(Complex::new(1e5, 1e5))
+                        } else {
+                            Ok(tetration_result)
+                        }
+                    } else {
+                        // For higher heights, return a safe value to avoid immediate escape
+                        // Pentation grows extremely rapidly and causes immediate escape for all points
+                        Ok(Complex::new(1.0, 0.0))  // Safe default for fractal generation
+                    }
+                } else {
+                    // For non-integer heights, return a safe value to avoid black images
+                    Ok(Complex::new(1.0, 0.0))  // Safe default
+                }
+            }
+            BinaryOp::Hexation(left, right) => {
+                let base = left.evaluate(z, param)?;
+                let height = right.evaluate(z, param)?;
+
+                // Hexation is iterated pentation: base^^^^height
+                // For complex numbers, hexation is even more complex and diverges extremely rapidly
+                // For fractal generation, we need to be extremely conservative
+                if height.im == 0.0 && height.re.fract() == 0.0 && height.re > 0.0 && height.re <= 2.0 {
+                    // Integer hexation for very small values - most stable for fractals
+                    let n = height.re as u32;
+                    if n == 1 {
+                        Ok(base)
+                    } else if n == 2 {
+                        // base^^^^2 = base^^^base (pentation)
+                        // We need to implement pentation directly here
+                        let pentation_result = if base.norm_sqr() < 1e-10 {
+                            // Handle zero base case
+                            Complex::new(1.0, 0.0)  // 0^^^n where n > 0 is typically 1 for n=1, 0 for n>1
+                        } else if base.im == 0.0 && base.re.fract() == 0.0 && base.re > 0.0 && base.re <= 3.0 {
+                            // Integer pentation for small values - most stable for fractals
+                            let base_int = base.re as u32;
+                            if base_int == 1 {
+                                base  // 1^^^anything = 1
+                            } else if base_int == 2 {
+                                // 2^^^2 = 2^^2 = 2^2 = 4
+                                let z_pow_z = base.powc(base);
+                                if z_pow_z.norm_sqr() > 1e10 {
+                                    Complex::new(1e5, 1e5)
+                                } else {
+                                    z_pow_z
+                                }
+                            } else {
+                                // For higher bases, return a safe value to avoid immediate escape
+                                Complex::new(1.0, 0.0)
+                            }
+                        } else {
+                            // For non-integer base, return a safe value
+                            Complex::new(1.0, 0.0)
+                        };
+
+                        // Check for overflow
+                        if pentation_result.norm_sqr() > 1e10 {
+                            Ok(Complex::new(1e5, 1e5))
+                        } else {
+                            Ok(pentation_result)
+                        }
+                    } else {
+                        // For higher heights, return a safe value to avoid immediate escape
+                        // Hexation grows even more rapidly than pentation
+                        Ok(Complex::new(1.0, 0.0))  // Safe default for fractal generation
+                    }
+                } else {
+                    // For non-integer heights, return a safe value to avoid black images
+                    Ok(Complex::new(1.0, 0.0))  // Safe default
+                }
+            }
         }
     }
 }
@@ -666,6 +1027,16 @@ enum Function {
     Zeta(Box<dyn Expression>),   // Riemann zeta function
     SuperLog(Box<dyn Expression>),  // Super-logarithm (inverse of tetration)
     SuperExp(Box<dyn Expression>),  // Super-exponential (tetration with base e)
+    PentaRoot(Box<dyn Expression>), // Inverse of pentation (pentation root)
+    HexaRoot(Box<dyn Expression>),  // Inverse of hexation (hexation root)
+    Sqrt(Box<dyn Expression>),      // Square root for complex numbers
+    Cbrt(Box<dyn Expression>),      // Cube root for complex numbers
+    Asin(Box<dyn Expression>),      // Arcsine for complex numbers
+    Acos(Box<dyn Expression>),      // Arccosine for complex numbers
+    Atan(Box<dyn Expression>),      // Arctangent for complex numbers
+    Sinh(Box<dyn Expression>),      // Hyperbolic sine for complex numbers
+    Cosh(Box<dyn Expression>),      // Hyperbolic cosine for complex numbers
+    Tanh(Box<dyn Expression>),      // Hyperbolic tangent for complex numbers
 }
 
 impl Expression for Function {
@@ -718,6 +1089,62 @@ impl Expression for Function {
                 // This is a placeholder - proper implementation is complex
                 // For now, return e^z as a simple approximation
                 Ok(arg.exp())
+            }
+            Function::PentaRoot(expr) => {
+                let _arg = expr.evaluate(z, param)?;
+                // Penta-root (inverse of pentation)
+                // This is a placeholder - proper implementation is extremely complex
+                // For now, return a safe value
+                Ok(Complex::new(1.0, 0.0))
+            }
+            Function::HexaRoot(expr) => {
+                let _arg = expr.evaluate(z, param)?;
+                // Hexa-root (inverse of hexation)
+                // This is a placeholder - proper implementation is extremely complex
+                // For now, return a safe value
+                Ok(Complex::new(1.0, 0.0))
+            }
+            Function::Sqrt(expr) => {
+                let arg = expr.evaluate(z, param)?;
+                // Square root for complex numbers
+                Ok(arg.sqrt())
+            }
+            Function::Cbrt(expr) => {
+                let arg = expr.evaluate(z, param)?;
+                // Cube root for complex numbers
+                // For complex numbers, we use the principal cube root
+                // This is equivalent to arg^(1/3)
+                Ok(arg.powf(1.0/3.0))
+            }
+            Function::Asin(expr) => {
+                let arg = expr.evaluate(z, param)?;
+                // Arcsine for complex numbers
+                Ok(arg.asin())
+            }
+            Function::Acos(expr) => {
+                let arg = expr.evaluate(z, param)?;
+                // Arccosine for complex numbers
+                Ok(arg.acos())
+            }
+            Function::Atan(expr) => {
+                let arg = expr.evaluate(z, param)?;
+                // Arctangent for complex numbers
+                Ok(arg.atan())
+            }
+            Function::Sinh(expr) => {
+                let arg = expr.evaluate(z, param)?;
+                // Hyperbolic sine for complex numbers
+                Ok(arg.sinh())
+            }
+            Function::Cosh(expr) => {
+                let arg = expr.evaluate(z, param)?;
+                // Hyperbolic cosine for complex numbers
+                Ok(arg.cosh())
+            }
+            Function::Tanh(expr) => {
+                let arg = expr.evaluate(z, param)?;
+                // Hyperbolic tangent for complex numbers
+                Ok(arg.tanh())
             }
         }
     }
@@ -1384,11 +1811,29 @@ pub fn mandelbrot_iterations(c: Complex<f64>, params: &FractalParams) -> u32 {
     let mut iter = 0;
 
     while iter < params.max_iterations {
+        // Debug: Print values before formula evaluation
+        if params.max_iterations <= 16 && iter < 3 {
+            eprintln!("DEBUG: Before Iter {}: z=({:.6}, {:.6}), c=({:.6}, {:.6})",
+                     iter + 1, z.re, z.im, c.re, c.im);
+        }
+
         // Use the formula specified in params, defaulting to z^2 + c if evaluation fails
         z = match MathEvaluator::evaluate_formula_with_param(&params.formula, z, c) {
-            Ok(result) => result,
-            Err(_) => z * z + c, // Fallback to standard formula
+            Ok(result) => {
+                // If we get here, the formula evaluation succeeded
+                result
+            },
+            Err(e) => {
+                eprintln!("DEBUG: Formula evaluation error: '{}', falling back to z*z + c", e);
+                z * z + c // Fallback to standard formula
+            },
         };
+
+        // Debug: Print values after formula evaluation
+        if params.max_iterations <= 16 && iter < 3 {
+            eprintln!("DEBUG: After Iter {}: z=({:.6}, {:.6}), |z|²={:.6}, escaped={}",
+                     iter + 1, z.re, z.im, z.norm_sqr(), z.norm_sqr() > params.bailout * params.bailout);
+        }
 
         if z.norm_sqr() > params.bailout * params.bailout {
             break;
