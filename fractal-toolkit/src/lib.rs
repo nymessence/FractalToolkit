@@ -533,8 +533,29 @@ impl Expression for BinaryOp {
                 } else {
                     // Use the formula: z^w = exp(w * ln(z))
                     let log_base = base.ln();
-                    let result = (exp * log_base).exp();
-                    Ok(result)
+
+                    // Check if log_base is NaN or infinite
+                    if log_base.re.is_nan() || log_base.im.is_nan() || log_base.re.is_infinite() || log_base.im.is_infinite() {
+                        // Return a safe value if logarithm is problematic
+                        Ok(Complex::new(0.0, 0.0))
+                    } else {
+                        let result = (exp * log_base).exp();
+
+                        // Check if result is NaN or infinite
+                        if result.re.is_nan() || result.im.is_nan() || result.re.is_infinite() || result.im.is_infinite() {
+                            // Return a safe value if result is problematic
+                            Ok(Complex::new(0.0, 0.0))
+                        } else {
+                            // Add safeguard against extremely large values that can cause numerical instability
+                            // This can happen with complex exponents, leading to black images
+                            if result.norm_sqr() > 1e100 {
+                                // Return a large but finite value to avoid overflow
+                                Ok(Complex::new(1e50, 1e50))
+                            } else {
+                                Ok(result)
+                            }
+                        }
+                    }
                 }
             }
             BinaryOp::Tetration(left, right) => {
@@ -1354,10 +1375,17 @@ pub fn julia_iterations(z: Complex<f64>, params: &FractalParams) -> u32 {
 
     while iter < params.max_iterations {
         // Use the formula specified in params, defaulting to z^2 + c if evaluation fails
-        z = match MathEvaluator::evaluate_formula_with_param(&params.formula, z, c) {
+        let new_z = match MathEvaluator::evaluate_formula_with_param(&params.formula, z, c) {
             Ok(result) => result,
             Err(_) => z * z + c, // Fallback to standard formula
         };
+
+        // Debug: Print values for all points at first iteration
+        if iter == 0 {
+            println!("Initial point: z = {:?}, c = {:?}, new_z = {:?}, norm_sqr = {}", z, c, new_z, new_z.norm_sqr());
+        }
+
+        z = new_z;
 
         if z.norm_sqr() > params.bailout * params.bailout {
             break;
