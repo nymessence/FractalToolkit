@@ -87,21 +87,15 @@ struct ExpressionParser;
 impl ExpressionParser {
     /// Evaluate a mathematical expression with complex numbers
     pub fn evaluate(formula: &str, z: Complex<f64>, param: Complex<f64>) -> Result<Complex<f64>, String> {
-        eprintln!("DEBUG: ExpressionParser::evaluate called with formula: '{}', z=({:.3}, {:.3}), param=({:.3}, {:.3})",
-                 formula, z.re, z.im, param.re, param.im);
         let tokens = Self::tokenize(formula)?;
-        eprintln!("DEBUG: Tokenized to: {:?}", tokens);
         let mut pos = 0;
         let ast = Self::parse_expression(&tokens, &mut pos, z, param)?;
-        eprintln!("DEBUG: AST created successfully");
         let result = ast.evaluate(z, param)?;
-        eprintln!("DEBUG: AST evaluated to: ({:.3}, {:.3})", result.re, result.im);
         Ok(result)
     }
 
     /// Tokenize the input string
     fn tokenize(input: &str) -> Result<Vec<Token>, String> {
-        eprintln!("DEBUG: Full input string: '{}'", input);
         let mut tokens = Vec::new();
         let mut chars = input.chars().peekable();
 
@@ -744,12 +738,9 @@ impl Expression for BinaryOp {
                     // In fractal context, 0^w where w is not zero should be 0
                     if exp.norm_sqr() < 1e-10 {
                         // This is essentially 0^0, which is typically defined as 1
-                        eprintln!("DEBUG POW: 0^0 case, returning (1.0, 0.0)");
                         Ok(Complex::new(1.0, 0.0))
                     } else {
                         // 0^w where w is not zero should be 0
-                        eprintln!("DEBUG POW: 0^w (w!=0) case, base=({:.3}, {:.3}), exp=({:.3}, {:.3}), returning (0.0, 0.0)",
-                                 base.re, base.im, exp.re, exp.im);
                         Ok(Complex::new(0.0, 0.0))
                     }
                 } else {
@@ -760,7 +751,6 @@ impl Expression for BinaryOp {
                         if base.norm_sqr() < 1e-10 {
                             // 0^real_number where real_number > 0 should be 0
                             // 0^real_number where real_number <= 0 is undefined (return 0 as safe value)
-                            eprintln!("DEBUG POW: Zero base with real exp, returning (0.0, 0.0)");
                             Ok(Complex::new(0.0, 0.0))
                         } else {
                             // For non-zero base with real exponent, use the standard approach
@@ -1811,11 +1801,6 @@ pub fn mandelbrot_iterations(c: Complex<f64>, params: &FractalParams) -> u32 {
     let mut iter = 0;
 
     while iter < params.max_iterations {
-        // Debug: Print values before formula evaluation
-        if params.max_iterations <= 16 && iter < 3 {
-            eprintln!("DEBUG: Before Iter {}: z=({:.6}, {:.6}), c=({:.6}, {:.6})",
-                     iter + 1, z.re, z.im, c.re, c.im);
-        }
 
         // Use the formula specified in params, defaulting to z^2 + c if evaluation fails
         z = match MathEvaluator::evaluate_formula_with_param(&params.formula, z, c) {
@@ -1823,17 +1808,11 @@ pub fn mandelbrot_iterations(c: Complex<f64>, params: &FractalParams) -> u32 {
                 // If we get here, the formula evaluation succeeded
                 result
             },
-            Err(e) => {
-                eprintln!("DEBUG: Formula evaluation error: '{}', falling back to z*z + c", e);
+            Err(_e) => {
                 z * z + c // Fallback to standard formula
             },
         };
 
-        // Debug: Print values after formula evaluation
-        if params.max_iterations <= 16 && iter < 3 {
-            eprintln!("DEBUG: After Iter {}: z=({:.6}, {:.6}), |z|²={:.6}, escaped={}",
-                     iter + 1, z.re, z.im, z.norm_sqr(), z.norm_sqr() > params.bailout * params.bailout);
-        }
 
         if z.norm_sqr() > params.bailout * params.bailout {
             break;
