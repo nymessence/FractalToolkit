@@ -536,7 +536,8 @@ impl Expression for BinaryOp {
                     // Check if the exponent has an imaginary component (complex exponent)
                     if exp.im.abs() > 1e-10 {
                         // For complex exponents in fractals, use a more stable approach
-                        // The standard complex power can cause all points to escape immediately
+                        // Complex exponents can cause immediate escape for all points
+                        // due to mathematical instabilities in the iteration
 
                         // Use the standard formula: z^w = exp(w * ln(z))
                         let log_base = base.ln();
@@ -554,15 +555,19 @@ impl Expression for BinaryOp {
                                 Ok(Complex::new(0.0, 0.0))
                             } else {
                                 // For complex exponents in fractals, we need to be very conservative
-                                // to prevent immediate escape of all points
-                                // If the result is too large, scale it down significantly
-                                let max_norm_for_complex_exp = 1.0; // Much more conservative for complex exponents
-                                let current_norm = result.norm();
+                                // The complex exponentiation often causes immediate escape
+                                // Use a more stable approach by limiting the effect
 
-                                if current_norm > max_norm_for_complex_exp {
-                                    // Scale down significantly to allow for fractal formation
-                                    let scale_factor = max_norm_for_complex_exp / current_norm;
-                                    Ok(Complex::new(result.re * scale_factor, result.im * scale_factor))
+                                // Calculate how far the result is from the original base
+                                // and dampen the effect to allow for fractal formation
+                                let original_norm = base.norm();
+                                let result_norm = result.norm();
+
+                                // If the result is much larger than the original, dampen it
+                                if result_norm > original_norm * 10.0 {
+                                    // Dampen the result to prevent immediate escape
+                                    let dampening_factor = (original_norm * 10.0) / result_norm.max(1e-10);
+                                    Ok(Complex::new(result.re * dampening_factor, result.im * dampening_factor))
                                 } else {
                                     Ok(result)
                                 }
