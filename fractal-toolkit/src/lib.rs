@@ -535,19 +535,28 @@ impl Expression for BinaryOp {
                 } else {
                     // Check if the exponent is purely real (no imaginary component)
                     if exp.im.abs() < 1e-10 {
-                        // For real exponents, use the standard approach which should work well
-                        // This preserves the original behavior for real exponents like z^2, z^3, z^2.7, etc.
+                        // For real exponents, use the standard approach
+                        // But be careful with non-integer real exponents which can also cause immediate escape
                         let result = base.powf(exp.re);
 
                         // Check if result is NaN or infinite
                         if result.re.is_nan() || result.im.is_nan() || result.re.is_infinite() || result.im.is_infinite() {
                             // Return a safe value if result is problematic
                             Ok(Complex::new(0.0, 0.0))
-                        } else if result.norm_sqr() > 1e100 {
-                            // For extremely large values, return a moderate value
-                            Ok(Complex::new(2.0, 0.0))
                         } else {
-                            Ok(result)
+                            // For fractal generation, even real exponents with non-integer values
+                            // can cause immediate escape for all points, so we need to be conservative
+                            let result_norm = result.norm();
+
+                            // Use a reasonable upper bound to prevent immediate escape
+                            let max_norm = 10.0; // Reasonable upper bound for fractal iteration
+
+                            if result_norm > max_norm {
+                                let scale_factor = max_norm / result_norm.max(1e-10); // Avoid division by zero
+                                Ok(Complex::new(result.re * scale_factor, result.im * scale_factor))
+                            } else {
+                                Ok(result)
+                            }
                         }
                     } else {
                         // For complex exponents in fractals, we need a special algorithm
@@ -570,24 +579,25 @@ impl Expression for BinaryOp {
                             // Use a safe fallback value
                             Ok(Complex::new(0.0, 0.0))
                         } else {
-                            // For complex exponents in fractals, we'll use a completely different approach
-                            // that's designed specifically for fractal stability
+                            // For complex exponents in fractals, we need to be very conservative
+                            // The complex power z^(a+bi) where both a and b are non-zero
+                            // can cause immediate escape for all points in the iteration
+                            // Use a conservative maximum value that allows iteration to continue
 
-                            // The issue is that complex exponents cause immediate escape
-                            // Let's implement a modified approach that prevents this
+                            // Calculate the magnitude of the result
                             let result_norm = result.norm();
 
-                            // Instead of using the raw result, we'll use a transformation that
-                            // maintains the mathematical character while allowing fractal formation
-                            // Use a sigmoid-like function to compress the range
-                            let compressed_norm = result_norm / (1.0 + result_norm);
+                            // For fractal generation, we want to avoid immediate escape
+                            // Use a reasonable maximum value that allows iteration to continue
+                            let max_norm = 10.0; // Reasonable upper bound for fractal iteration
 
-                            // Maintain the angle but adjust the magnitude
-                            let new_angle = result.arg();
-                            let new_re = compressed_norm * new_angle.cos();
-                            let new_im = compressed_norm * new_angle.sin();
-
-                            Ok(Complex::new(new_re, new_im))
+                            if result_norm > max_norm {
+                                // Scale down the result to allow for fractal iteration
+                                let scale_factor = max_norm / result_norm.max(1e-10); // Avoid division by zero
+                                Ok(Complex::new(result.re * scale_factor, result.im * scale_factor))
+                            } else {
+                                Ok(result)
+                            }
                         }
                     }
                 }
