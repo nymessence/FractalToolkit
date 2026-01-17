@@ -2626,13 +2626,11 @@ where
     let total_pixels = width * height;
     let processed_pixels = Arc::new(AtomicUsize::new(0));
     let start_time = Instant::now();
+    let last_report_time = Arc::new(std::sync::Mutex::new(Instant::now()));
 
     // Print initial progress
     println!("Rendering fractal: 0% (0/{}) - Started at {:?}. Using {} threads.",
              total_pixels, chrono::Local::now().format("%H:%M:%S"), rayon::current_num_threads());
-
-    let last_report_time = Instant::now();
-    let report_interval = Duration::from_secs(10); // Report every 10 seconds
 
     // Create a vector of (x, y) coordinates to process in parallel
     let coords: Vec<(u32, u32)> = (0..height).flat_map(|y| (0..width).map(move |x| (x, y))).collect();
@@ -2654,27 +2652,38 @@ where
             // Update progress counter
             let current = processed_pixels.fetch_add(1, Ordering::SeqCst) + 1;
 
-            // Time-based progress reporting every 10 seconds
-            if last_report_time.elapsed() >= report_interval {
-                let elapsed = start_time.elapsed();
-                let percentage = (current as f64 / total_pixels as f64 * 100.0).round();
+            // Time-based progress reporting every 10 seconds - only check every few rows to reduce overhead
+            if current > 0 && current % (width as usize * 2) == 0 { // Only check every few rows to reduce overhead
+                let should_report = {
+                    let last_time = last_report_time.lock().unwrap();
+                    last_time.elapsed() >= Duration::from_secs(10) // At least 10 seconds since last report
+                };
 
-                if current > 0 {
-                    let rate = current as f64 / elapsed.as_secs_f64(); // pixels per second
-                    let remaining_pixels = (total_pixels as usize - current) as f64;
-                    let estimated_remaining_time = remaining_pixels / rate; // seconds
+                if should_report {
+                    let elapsed = start_time.elapsed();
+                    let percentage = (current as f64 / total_pixels as f64 * 100.0).round();
 
-                    let eta = chrono::Local::now() + chrono::Duration::seconds(estimated_remaining_time as i64);
+                    if current > 0 {
+                        let rate = current as f64 / elapsed.as_secs_f64(); // pixels per second
+                        let remaining_pixels = (total_pixels as usize - current) as f64;
+                        let estimated_remaining_time = remaining_pixels / rate; // seconds
 
-                    println!(
-                        "Rendering fractal: {:.1}% ({}/{}), Elapsed: {:.1}s, ETA: {} (~{:.1}s remaining)",
-                        percentage,
-                        current,
-                        total_pixels,
-                        elapsed.as_secs_f64(),
-                        eta.format("%H:%M:%S"),
-                        estimated_remaining_time
-                    );
+                        let eta = chrono::Local::now() + chrono::Duration::seconds(estimated_remaining_time as i64);
+
+                        println!(
+                            "Rendering fractal: {:.1}% ({}/{}), Elapsed: {:.1}s, ETA: {} (~{:.1}s remaining)",
+                            percentage,
+                            current,
+                            total_pixels,
+                            elapsed.as_secs_f64(),
+                            eta.format("%H:%M:%S"),
+                            estimated_remaining_time
+                        );
+
+                        // Update the last report time
+                        let mut last_time = last_report_time.lock().unwrap();
+                        *last_time = Instant::now();
+                    }
                 }
             }
 
