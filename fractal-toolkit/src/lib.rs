@@ -1255,6 +1255,7 @@ pub struct FractalParams {
     pub spawn: Complex<f64>,        // For Julia sets
     pub bailout: f64,
     pub formula: String,
+    pub i_sqrt_value: Complex<f64>, // Custom imaginary unit (i = sqrt of this value), defaults to 0+1i
 }
 
 impl FractalParams {
@@ -1265,6 +1266,7 @@ impl FractalParams {
             spawn: Complex::new(spawn[0], spawn[1]),
             bailout,
             formula,
+            i_sqrt_value: Complex::new(0.0, 1.0), // Default to standard i = sqrt(-1)
         }
     }
 }
@@ -1280,6 +1282,7 @@ pub struct BuddhabrotParams {
     pub bailout: f64,
     pub formula: String,
     pub channels: BuddhabrotChannels, // RGB channel configurations
+    pub i_sqrt_value: Complex<f64>, // Custom imaginary unit (i = sqrt of this value)
 }
 
 #[derive(Debug, Clone)]
@@ -1318,6 +1321,7 @@ impl BuddhabrotParams {
             bailout,
             formula,
             channels,
+            i_sqrt_value: Complex::new(0.0, 1.0), // Default to standard i = sqrt(-1)
         }
     }
 }
@@ -1334,6 +1338,7 @@ pub struct BuddhabrotJuliaParams {
     pub spawn: Complex<f64>,        // Constant c value for Julia set
     pub formula: String,
     pub channels: BuddhabrotChannels, // RGB channel configurations
+    pub i_sqrt_value: Complex<f64>, // Custom imaginary unit (i = sqrt of this value)
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1342,6 +1347,7 @@ pub struct DomainColorParams {
     pub width: u32,
     pub height: u32,
     pub formula: String,
+    pub i_sqrt_value: Complex<f64>, // Custom imaginary unit (i = sqrt of this value)
 }
 
 impl BuddhabrotJuliaParams {
@@ -1368,6 +1374,7 @@ impl BuddhabrotJuliaParams {
             spawn: Complex::new(spawn[0], spawn[1]),
             formula,
             channels,
+            i_sqrt_value: Complex::new(0.0, 1.0), // Default to standard i = sqrt(-1)
         }
     }
 }

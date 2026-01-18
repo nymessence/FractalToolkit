@@ -2,6 +2,7 @@ use clap::Parser;
 use fractal_toolkit::{FractalParams, julia_iterations, generate_html_file, parse_color_palette, ColorStop, generate_fractal_image};
 use image::{ImageBuffer, Rgba};
 use rayon::ThreadPoolBuilder;
+use num_complex::Complex;
 
 fn init_rayon_pool() {
     let num_threads = num_cpus::get();
@@ -9,6 +10,88 @@ fn init_rayon_pool() {
         .num_threads(num_threads)
         .build_global()
         .expect("Failed to initialize Rayon thread pool");
+}
+
+// Helper function to parse a complex number from string
+fn parse_complex_number(s: &str) -> Result<Complex<f64>, String> {
+    let s = s.trim();
+
+    // Handle simple cases first
+    if s == "i" || s == "I" {
+        return Ok(Complex::new(0.0, 1.0));
+    }
+
+    // Try to parse as a real number
+    if let Ok(real_val) = s.parse::<f64>() {
+        return Ok(Complex::new(real_val, 0.0));
+    }
+
+    // Handle complex number format like "a+bi", "a-bi", "a+b*i", etc.
+    let mut real_part = 0.0;
+    let mut imag_part = 0.0;
+
+    // Check if it contains 'i' or 'I'
+    if s.contains('i') || s.contains('I') {
+        let s = s.replace(" ", ""); // Remove spaces
+        let s = s.replace("*", ""); // Remove multiplication symbols
+
+        // Handle cases like "i", "-i", "+i"
+        if s == "i" || s == "+i" || s == "I" || s == "+I" {
+            return Ok(Complex::new(0.0, 1.0));
+        } else if s == "-i" || s == "-I" {
+            return Ok(Complex::new(0.0, -1.0));
+        }
+
+        // Split on '+' or '-' but preserve the signs
+        let mut real_str = "";
+        let mut imag_str = "";
+
+        // Find the position of the imaginary part
+        if let Some(i_pos) = s.find(|c| c == 'i' || c == 'I') {
+            let before_i = &s[..i_pos];
+
+            // Look for the last occurrence of + or - before the i
+            if let Some(last_sign_pos) = before_i.rfind(|c: char| c == '+' || c == '-') {
+                if last_sign_pos == 0 {
+                    // Starts with a sign, e.g., "-2.5i" or "+3.2i"
+                    real_str = "0";
+                    imag_str = &s;
+                } else {
+                    // Has both real and imaginary parts, e.g., "1.5+2.3i"
+                    real_str = &s[..last_sign_pos];
+                    imag_str = &s[last_sign_pos..i_pos];
+                }
+            } else {
+                // Just an imaginary number, e.g., "2.5i"
+                real_str = "0";
+                imag_str = &s[..i_pos];
+            }
+
+            // Parse real part
+            if !real_str.is_empty() {
+                real_part = real_str.parse::<f64>().map_err(|_| format!("Invalid real part: {}", real_str))?;
+            }
+
+            // Parse imaginary part
+            if !imag_str.is_empty() {
+                if imag_str == "+" || imag_str == "" {
+                    imag_part = 1.0;
+                } else if imag_str == "-" {
+                    imag_part = -1.0;
+                } else {
+                    imag_part = imag_str.parse::<f64>().map_err(|_| format!("Invalid imaginary part: {}", imag_str))?;
+                }
+            }
+        } else {
+            // Just a real number
+            real_part = s.parse::<f64>().map_err(|_| format!("Invalid number: {}", s))?;
+        }
+    } else {
+        // Just a real number
+        real_part = s.parse::<f64>().map_err(|_| format!("Invalid number: {}", s))?;
+    }
+
+    Ok(Complex::new(real_part, imag_part))
 }
 
 #[derive(Parser)]
@@ -47,6 +130,10 @@ struct Args {
     /// Output file name
     #[arg(long, default_value = "julia_output.png")]
     output: String,
+
+    /// Custom imaginary unit value (i = sqrt of this value), defaults to -1 if unspecified
+    #[arg(long, default_value = "-1")]
+    i_sqrt_value: String,
 }
 
 fn main() {
@@ -88,15 +175,22 @@ fn main() {
     }
     let bounds = [args.bounds[0], args.bounds[1], args.bounds[2], args.bounds[3]];
 
+    // Parse the custom i_sqrt_value
+    let i_sqrt_complex = parse_complex_number(&args.i_sqrt_value).unwrap_or_else(|_| {
+        eprintln!("Error parsing i_sqrt_value, using default (0,1) for standard i");
+        num_complex::Complex::new(0.0, 1.0)
+    });
+
     // Create fractal parameters
     let formula_clone = args.formula.clone();
-    let params = FractalParams::new(
+    let mut params = FractalParams::new(
         bounds,
         args.max_iterations,
         [args.spawn[0], args.spawn[1]],
         args.bailout,
         formula_clone,
     );
+    params.i_sqrt_value = i_sqrt_complex;
 
     // Parse color palette if provided
     let color_palette = if let Some(ref palette_str) = args.color_pallette {

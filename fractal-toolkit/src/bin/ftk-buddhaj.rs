@@ -1,6 +1,7 @@
 use clap::Parser;
 use fractal_toolkit::{BuddhabrotJuliaParams, BuddhabrotChannels, BuddhabrotChannel, generate_buddhabrot_julia, generate_html_file};
 use rayon::ThreadPoolBuilder;
+use num_complex::Complex;
 
 fn init_rayon_pool() {
     let num_threads = num_cpus::get();
@@ -62,6 +63,10 @@ struct Args {
     /// Output file name
     #[arg(long, default_value = "buddhaj_output.png")]
     output: String,
+
+    /// Custom imaginary unit value (i = sqrt of this value), defaults to -1 if unspecified
+    #[arg(long, default_value = "-1")]
+    i_sqrt_value: String,
 }
 
 fn main() {
@@ -149,8 +154,14 @@ fn main() {
         samples: args.blue_channel[2],
     };
     
+    // Parse the custom i_sqrt_value
+    let i_sqrt_complex = parse_complex_number(&args.i_sqrt_value).unwrap_or_else(|_| {
+        eprintln!("Error parsing i_sqrt_value, using default (0,1) for standard i");
+        Complex::new(0.0, 1.0)
+    });
+
     // Create Buddhabrot Julia parameters
-    let params = BuddhabrotJuliaParams::new(
+    let mut params = BuddhabrotJuliaParams::new(
         bounds,
         width,
         height,
@@ -166,6 +177,7 @@ fn main() {
             blue: blue_channel.clone(),
         },
     );
+    params.i_sqrt_value = i_sqrt_complex;
     
     // Generate the Buddhabrot Julia image
     let img = generate_buddhabrot_julia(&params);
@@ -195,4 +207,86 @@ fn main() {
         println!("HTML explorer saved to {}", 
                  std::path::Path::new(&args.output).with_extension("html").display());
     }
+}
+
+// Helper function to parse a complex number from string
+fn parse_complex_number(s: &str) -> Result<Complex<f64>, String> {
+    let s = s.trim();
+
+    // Handle simple cases first
+    if s == "i" || s == "I" {
+        return Ok(Complex::new(0.0, 1.0));
+    }
+
+    // Try to parse as a real number
+    if let Ok(real_val) = s.parse::<f64>() {
+        return Ok(Complex::new(real_val, 0.0));
+    }
+
+    // Handle complex number format like "a+bi", "a-bi", "a+b*i", etc.
+    let mut real_part = 0.0;
+    let mut imag_part = 0.0;
+
+    // Check if it contains 'i' or 'I'
+    if s.contains('i') || s.contains('I') {
+        let s = s.replace(" ", ""); // Remove spaces
+        let s = s.replace("*", ""); // Remove multiplication symbols
+
+        // Handle cases like "i", "-i", "+i"
+        if s == "i" || s == "+i" || s == "I" || s == "+I" {
+            return Ok(Complex::new(0.0, 1.0));
+        } else if s == "-i" || s == "-I" {
+            return Ok(Complex::new(0.0, -1.0));
+        }
+
+        // Split on '+' or '-' but preserve the signs
+        let mut real_str = "";
+        let mut imag_str = "";
+
+        // Find the position of the imaginary part
+        if let Some(i_pos) = s.find(|c| c == 'i' || c == 'I') {
+            let before_i = &s[..i_pos];
+
+            // Look for the last occurrence of + or - before the i
+            if let Some(last_sign_pos) = before_i.rfind(|c: char| c == '+' || c == '-') {
+                if last_sign_pos == 0 {
+                    // Starts with a sign, e.g., "-2.5i" or "+3.2i"
+                    real_str = "0";
+                    imag_str = &s;
+                } else {
+                    // Has both real and imaginary parts, e.g., "1.5+2.3i"
+                    real_str = &s[..last_sign_pos];
+                    imag_str = &s[last_sign_pos..i_pos];
+                }
+            } else {
+                // Just an imaginary number, e.g., "2.5i"
+                real_str = "0";
+                imag_str = &s[..i_pos];
+            }
+
+            // Parse real part
+            if !real_str.is_empty() {
+                real_part = real_str.parse::<f64>().map_err(|_| format!("Invalid real part: {}", real_str))?;
+            }
+
+            // Parse imaginary part
+            if !imag_str.is_empty() {
+                if imag_str == "+" || imag_str == "" {
+                    imag_part = 1.0;
+                } else if imag_str == "-" {
+                    imag_part = -1.0;
+                } else {
+                    imag_part = imag_str.parse::<f64>().map_err(|_| format!("Invalid imaginary part: {}", imag_str))?;
+                }
+            }
+        } else {
+            // Just a real number
+            real_part = s.parse::<f64>().map_err(|_| format!("Invalid number: {}", s))?;
+        }
+    } else {
+        // Just a real number
+        real_part = s.parse::<f64>().map_err(|_| format!("Invalid number: {}", s))?;
+    }
+
+    Ok(Complex::new(real_part, imag_part))
 }
