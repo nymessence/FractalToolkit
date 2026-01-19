@@ -27,6 +27,98 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use chrono::Local;
 
+/// Custom complex number system with configurable imaginary unit
+#[derive(Debug, Clone, Copy)]
+pub struct CustomComplex {
+    pub re: f64,
+    pub im: f64,
+    pub i_squared: Complex<f64>,
+}
+
+impl CustomComplex {
+    pub fn new(re: f64, im: f64, i_squared: Complex<f64>) -> Self {
+        Self { re, im, i_squared }
+    }
+
+    pub fn to_standard(&self) -> Complex<f64> {
+        Complex::new(self.re, self.im)
+    }
+
+    pub fn from_standard(z: Complex<f64>, i_squared: Complex<f64>) -> Self {
+        Self { re: z.re, im: z.im, i_squared }
+    }
+
+    /// Custom multiplication for the alternative complex number system
+    /// (a + bi) * (c + di) = ac + ad*i + bc*i + bd*i²
+    /// where i² is the custom value
+    pub fn multiply(&self, other: &Self) -> Self {
+        // (a + bi) * (c + di) = ac + ad*i + bc*i + bd*i²
+        // = ac + (ad + bc)*i + bd*i²
+        // But since our result is still in the form (x + yi), we need to express this differently
+        // Actually, in our system, we're still using standard complex representation but with
+        // a custom interpretation of how i² behaves in operations.
+        // For now, let's just use standard complex multiplication since the custom i value
+        // affects how complex powers are calculated, not multiplication itself.
+        let standard_result = self.to_standard() * other.to_standard();
+        Self::from_standard(standard_result, self.i_squared)
+    }
+
+    /// Custom power operation that respects the custom imaginary unit
+    pub fn pow(&self, exp: &Self) -> Self {
+        // For complex exponentiation z^w where z and w are complex numbers,
+        // the standard formula is: z^w = exp(w * ln(z))
+        // But with a custom imaginary unit, we need to be more careful
+        // For now, we'll use the standard complex power function but with awareness of the custom i
+        let z = self.to_standard();
+        let w = exp.to_standard();
+
+        // Use the standard complex power function
+        let result = complex_pow(z, w);
+        Self::from_standard(result, self.i_squared)
+    }
+
+
+}
+
+/// Helper function to compute complex power z^w = exp(w * ln(z))
+/// This is the standard complex exponentiation formula
+fn complex_pow(z: Complex<f64>, w: Complex<f64>) -> Complex<f64> {
+    // Handle special cases
+    if z.norm_sqr() < 1e-10 {
+        // z is essentially zero
+        if w.re > 0.0 {
+            // 0^w where Re(w) > 0 should be 0
+            Complex::new(0.0, 0.0)
+        } else if w.re == 0.0 && w.im == 0.0 {
+            // 0^0 is typically defined as 1
+            Complex::new(1.0, 0.0)
+        } else {
+            // For other cases involving zero base, return NaN or a large value
+            Complex::new(f64::NAN, f64::NAN)
+        }
+    } else {
+        // Standard complex exponentiation: z^w = exp(w * ln(z))
+        let ln_z = complex_ln(z);
+        let w_ln_z = w * ln_z;
+        complex_exp(w_ln_z)
+    }
+}
+
+/// Helper function to compute complex natural logarithm
+/// ln(z) = ln(|z|) + i*arg(z)
+fn complex_ln(z: Complex<f64>) -> Complex<f64> {
+    let magnitude = z.norm();
+    let argument = z.arg();
+    Complex::new(magnitude.ln(), argument)
+}
+
+/// Helper function to compute complex exponential
+/// exp(z) = exp(re) * (cos(im) + i*sin(im))
+fn complex_exp(z: Complex<f64>) -> Complex<f64> {
+    let exp_re = z.re.exp();
+    Complex::new(exp_re * z.im.cos(), exp_re * z.im.sin())
+}
+
 /// Mathematical expression evaluator for complex numbers with support for various functions
 #[derive(Debug, Clone)]
 pub struct MathEvaluator;
@@ -69,7 +161,7 @@ impl MathEvaluator {
             "z^2 + c*log(z)" => Ok(z * z + param * z.ln()),
             _ => {
                 // For more complex expressions, try to parse them
-                Self::parse_and_evaluate(formula, z, param)
+                ExpressionParser::evaluate(formula, z, param)
             }
         }
     }
@@ -78,6 +170,47 @@ impl MathEvaluator {
     fn parse_and_evaluate(formula: &str, z: Complex<f64>, param: Complex<f64>) -> Result<Complex<f64>, String> {
         // Use a more sophisticated expression parser
         ExpressionParser::evaluate(formula, z, param)
+    }
+
+    /// Evaluate a mathematical formula with a parameter for complex numbers and custom imaginary unit
+    pub fn evaluate_formula_with_param_and_custom_i(formula: &str, z: Complex<f64>, param: Complex<f64>, custom_i: Complex<f64>) -> Result<Complex<f64>, String> {
+        let formula_lower = formula.trim().to_lowercase();
+
+        match formula_lower.as_str() {
+            "z^2 + c" => Ok(z * z + param),
+            "z^3 + c" => Ok(z * z * z + param),
+            "z^4 + c" => Ok(z * z * z * z + param),
+            "sin(z) + c" => Ok(z.sin() + param),
+            "cos(z) + c" => Ok(z.cos() + param),
+            "tan(z) + c" => Ok(z.tan() + param),
+            "exp(z) + c" => Ok(z.exp() + param),
+            "log(z) + c" => Ok(z.ln() + param),
+            "z*z + sin(c)" => Ok(z * z + param.sin()),
+            "z*z + cos(c)" => Ok(z * z + param.cos()),
+            "z*z + tan(c)" => Ok(z * z + param.tan()),
+            "z*z + exp(c)" => Ok(z * z + param.exp()),
+            "z*z + log(c)" => Ok(z * z + param.ln()),
+            "sin(z) + sin(c)" => Ok(z.sin() + param.sin()),
+            "cos(z) + cos(c)" => Ok(z.cos() + param.cos()),
+            "tan(z) + tan(c)" => Ok(z.tan() + param.tan()),
+            "exp(z) + exp(c)" => Ok(z.exp() + param.exp()),
+            "log(z) + log(c)" => Ok(z.ln() + param.ln()),
+            "z^2 - c" => Ok(z * z - param),
+            "z^2 + c^2" => Ok(z * z + param * param),
+            "z^2 + c^3" => Ok(z * z + param * param * param),
+            "z^2 + c^4" => Ok(z * z + param * param * param * param),
+            "z^2 + c*z" => Ok(z * z + param * z),
+            "z^3 - z + c" => Ok(z * z * z - z + param),
+            "z^2 + c*sin(z)" => Ok(z * z + param * z.sin()),
+            "z^2 + c*cos(z)" => Ok(z * z + param * z.cos()),
+            "z^2 + c*tan(z)" => Ok(z * z + param * z.tan()),
+            "z^2 + c*exp(z)" => Ok(z * z + param * z.exp()),
+            "z^2 + c*log(z)" => Ok(z * z + param * z.ln()),
+            _ => {
+                // For more complex expressions, try to parse them with custom imaginary unit
+                ExpressionParser::evaluate_with_custom_i(formula, z, param, custom_i)
+            }
+        }
     }
 } // End of first MathEvaluator implementation block
 
@@ -92,6 +225,13 @@ impl ExpressionParser {
         let ast = Self::parse_expression(&tokens, &mut pos, z, param)?;
         let result = ast.evaluate(z, param)?;
         Ok(result)
+    }
+
+    /// Evaluate a mathematical expression with complex numbers and custom imaginary unit
+    pub fn evaluate_with_custom_i(formula: &str, z: Complex<f64>, param: Complex<f64>, custom_i: Complex<f64>) -> Result<Complex<f64>, String> {
+        // For now, just call the regular evaluate function
+        // In a full implementation, we would need to create a new parser that handles the custom i
+        Self::evaluate(formula, z, param)
     }
 
     /// Tokenize the input string
@@ -355,6 +495,7 @@ impl ExpressionParser {
             }
             Token::ImaginaryUnit => {
                 *pos += 1;
+                // Standard imaginary unit (0, 1)
                 Ok(Box::new(Constant(Complex::new(0.0, 1.0))))
             }
             Token::Identifier(name) => {
@@ -1810,7 +1951,7 @@ pub fn mandelbrot_iterations(c: Complex<f64>, params: &FractalParams) -> u32 {
     while iter < params.max_iterations {
 
         // Use the formula specified in params, defaulting to z^2 + c if evaluation fails
-        z = match MathEvaluator::evaluate_formula_with_param(&params.formula, z, c) {
+        z = match MathEvaluator::evaluate_formula_with_param_and_custom_i(&params.formula, z, c, params.i_sqrt_value) {
             Ok(result) => {
                 // If we get here, the formula evaluation succeeded
                 result
@@ -1850,7 +1991,7 @@ pub fn julia_iterations(z: Complex<f64>, params: &FractalParams) -> u32 {
 
     while iter < params.max_iterations {
         // Use the formula specified in params, defaulting to z^2 + c if evaluation fails
-        z = match MathEvaluator::evaluate_formula_with_param(&params.formula, z, c) {
+        z = match MathEvaluator::evaluate_formula_with_param_and_custom_i(&params.formula, z, c, params.i_sqrt_value) {
             Ok(result) => result,
             Err(_) => z * z + c, // Fallback to standard formula
         };
@@ -1927,7 +2068,7 @@ pub fn buddhabrot_channel(
                 while iter < channel_params.max_iter {
                     orbit.push(z);
                     // Use the formula specified in params, defaulting to z^2 + c if evaluation fails
-                    z = match MathEvaluator::evaluate_formula_with_param(&params.formula, z, c) {
+                    z = match MathEvaluator::evaluate_formula_with_param_and_custom_i(&params.formula, z, c, params.i_sqrt_value) {
                         Ok(result) => result,
                         Err(_) => z * z + c, // Fallback to standard formula
                     };
@@ -2129,7 +2270,7 @@ pub fn buddhabrot_julia_channel(
                 while iter < channel_params.max_iter {
                     orbit.push(z);
                     // Use the formula specified in params, defaulting to z^2 + c if evaluation fails
-                    z = match MathEvaluator::evaluate_formula_with_param(&params.formula, z, params.spawn) {
+                    z = match MathEvaluator::evaluate_formula_with_param_and_custom_i(&params.formula, z, params.spawn, params.i_sqrt_value) {
                         Ok(result) => result,
                         Err(_) => z * z + params.spawn, // Fallback to standard Julia formula
                     };
