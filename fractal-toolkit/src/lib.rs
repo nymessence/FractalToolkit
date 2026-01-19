@@ -123,6 +123,7 @@ fn complex_exp(z: Complex<f64>) -> Complex<f64> {
 #[derive(Debug, Clone)]
 pub struct MathEvaluator;
 
+#[allow(dead_code)]
 impl MathEvaluator {
     /// Evaluate a mathematical formula with a parameter for complex numbers
     /// Supports various functions like sin, cos, tan, exp, log, and more
@@ -2502,6 +2503,7 @@ pub fn generate_domain_color_plot(params: &DomainColorParams) -> image::RgbImage
 /// # Returns
 ///
 /// The result of evaluating the function at z, or an error if the formula is invalid
+#[allow(dead_code)]
 fn evaluate_complex_function(formula: &str, z: Complex<f64>) -> Result<Complex<f64>, String> {
     // Use the existing sophisticated parser
     let formula = formula.trim();

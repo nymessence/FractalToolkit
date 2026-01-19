@@ -239,7 +239,9 @@ fn parse_complex_number(s: &str) -> Result<Complex<f64>, String> {
             return Ok(Complex::new(0.0, -1.0));
         }
 
+        #[allow(unused_assignments)]
         let mut real_str = "";
+        #[allow(unused_assignments)]
         let mut imag_str = "";
 
         // Find the position of the imaginary part
