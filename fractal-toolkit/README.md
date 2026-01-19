@@ -7,6 +7,7 @@ A powerful and flexible fractal generation toolkit that supports complex mathema
 ### Advanced Mathematical Operations
 - **Complex Exponents**: Support for formulas like `z^(2.7+0.3i) + c`
 - **Real Non-Integer Exponents**: Handle expressions like `z^2.5 + c`
+- **Custom Imaginary Unit**: Define i² with the `--i-sqrt-value` parameter (defaults to -1 for standard complex numbers)
 - **Hyperoperations**: 
   - Tetration (`z^^w`) - iterated exponentiation
   - Pentation (`z^^^w`) - iterated tetration
@@ -55,6 +56,18 @@ cargo run --bin ftk-mandel -- --bounds=-2,2,-2,2 --dimensions=512,512 --formula=
 cargo run --bin ftk-mandel -- --bounds=-2,2,-2,2 --dimensions=512,512 --formula='z^(2.7+0.3i) + c'
 ```
 
+### Custom Imaginary Unit
+```bash
+# Use alternative number system where i² = -i
+cargo run --bin ftk-mandel -- --bounds=-2,2,-2,2 --dimensions=512,512 --formula='z^(2.7+0.3i) + c' --i-sqrt-value='-i'
+
+# Use split-complex numbers where i² = 1
+cargo run --bin ftk-mandel -- --bounds=-2,2,-2,2 --dimensions=512,512 --formula='z^2 + c' --i-sqrt-value='1'
+
+# Use custom complex value where i² = 0.5+0.5i
+cargo run --bin ftk-mandel -- --bounds=-2,2,-2,2 --dimensions=512,512 --formula='z^2 + c' --i-sqrt-value='0.5+0.5i'
+```
+
 ### Tetration-Based Fractal
 ```bash
 cargo run --bin ftk-mandel -- --bounds=-2,2,-2,2 --dimensions=256,256 --formula='z^^z + c' --max-iterations=32
@@ -78,6 +91,7 @@ Main command for generating Mandelbrot-style fractals with custom formulas.
 - `--color-pallette='[(hex_color,position),...]`: Color palette definition
 - `--bailout=value`: Escape threshold (default: 4)
 - `--formula='expression'`: Custom formula (default: 'z^2 + c')
+- `--i-sqrt-value='complex_value'`: Custom imaginary unit value (i = sqrt of this value), defaults to -1 if unspecified (default: -1)
 - `--output='filename.png'`: Output filename
 
 ## Examples
@@ -98,6 +112,18 @@ cargo run --bin ftk-mandel -- --bounds=-2,2,-2,2 --formula='z^(3.2-1.4i) + c'
 
 # Pure imaginary exponent
 cargo run --bin ftk-mandel -- --bounds=-2,2,-2,2 --formula='z^(0+2.5i) + c'
+```
+
+### Custom Imaginary Units
+```bash
+# Alternative number system where i² = -i
+cargo run --bin ftk-mandel -- --bounds=-2,2,-2,2 --formula='z^(2.7+0.3i) + c' --i-sqrt-value='-i'
+
+# Split-complex numbers where i² = 1
+cargo run --bin ftk-mandel -- --bounds=-2,2,-2,2 --formula='z^2 + c' --i-sqrt-value='1'
+
+# Custom complex value where i² = 0.5+0.5i
+cargo run --bin ftk-mandel -- --bounds=-2,2,-2,2 --formula='z^2 + c' --i-sqrt-value='0.5+0.5i'
 ```
 
 ### Trigonometric Functions

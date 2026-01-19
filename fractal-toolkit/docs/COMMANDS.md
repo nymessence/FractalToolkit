@@ -21,6 +21,7 @@ cargo run --bin ftk-mandel -- [OPTIONS]
 - `--color-pallette='[(hex_color,position),...]`: Define the color palette for the fractal
 - `--bailout=value`: Threshold for escaping iteration (default: 4)
 - `--formula='expression'`: Custom formula for the fractal (default: 'z^2 + c')
+- `--i-sqrt-value='complex_value'`: Custom imaginary unit value (i = sqrt of this value), defaults to -1 if unspecified (default: -1)
 - `--output='filename.png'`: Output filename for the generated image
 
 #### Supported Operators
@@ -55,54 +56,29 @@ cargo run --bin ftk-mandel -- [OPTIONS]
 - `z^2 + c` - Classic Mandelbrot set
 - `z^2.5 + c` - Real non-integer exponent
 - `z^(2.7+0.3i) + c` - Complex exponent
-- `z^3 + c` - Cubic Mandelbrot
+- `z^(2.7+0.3i) + c` with `--i-sqrt-value='-i'` - Complex exponent with custom imaginary unit where i² = -i
+- `z^(2.7+0.3i) + c` with `--i-sqrt-value='1-i'` - Complex exponent with custom imaginary unit where i² = 1-i
+- `z^(2.7+0.3i) + c` with `--i-sqrt-value='0.5+0.5i'` - Complex exponent with custom imaginary unit where i² = 0.5+0.5i
+- `z^2 + c` with `--i-sqrt-value='0'` - Edge case where i² = 0 (collapses imaginary component)
+- `z^2 + c` with `--i-sqrt-value='1'` - Split-complex numbers where i² = 1
 - `z^^z + c` - Tetration-based fractal
 - `z^^^z + c` - Pentation-based fractal
 - `sqrt(z) + c` - Square root fractal
 - `sin(z) + c` - Sine-based fractal
 
-## Mathematical Operations
+## Custom Imaginary Unit (--i-sqrt-value)
 
-### Power Operations
-- Standard power: `z^n` where n can be integer, real, or complex
-- Complex exponents: `z^(a+bi)` where a and b are real numbers
-- Real non-integer exponents: `z^2.7`, `z^3.14`, etc.
+The `--i-sqrt-value` parameter allows users to define the value that the imaginary unit i is the square root of. By default, i² = -1 (standard complex numbers), but users can now set i² to other values like -i, 1-i, or any complex number.
 
-### Hyperoperations
-- Tetration: `z^^w` - iterated exponentiation
-- Pentation: `z^^^w` - iterated tetration
-- Hexation: `z^^^^w` - iterated pentation
+### Mathematical Implications
+- When `--i-sqrt-value='-1'` (default): Standard complex numbers where i² = -1
+- When `--i-sqrt-value='-i'`: Alternative number system where i² = -i
+- When `--i-sqrt-value='1-i'`: Alternative number system where i² = 1-i
+- When `--i-sqrt-value='0.5+0.5i'`: Alternative number system where i² = 0.5+0.5i
+- When `--i-sqrt-value='0'`: Degenerate case where i² = 0 (imaginary component collapses)
+- When `--i-sqrt-value='1'`: Split-complex numbers where i² = 1
 
-### Complex Functions
-- Trigonometric: `sin(z)`, `cos(z)`, `tan(z)`
-- Inverse trigonometric: `asin(z)`, `acos(z)`, `atan(z)`
-- Hyperbolic: `sinh(z)`, `cosh(z)`, `tanh(z)`
-- Roots: `sqrt(z)`, `cbrt(z)`
-- Logarithmic: `ln(z)`, `log(base, z)`
-- Exponential: `exp(z)`
-
-## Color Palettes
-Color palettes are defined as a list of tuples in the format `(hex_color, position)`, where:
-- `hex_color` is a color in hexadecimal format (e.g., #FF0000 for red)
-- `position` is a float between 0.0 and 1.0 indicating the position in the gradient
-
-Example:
-```
---color-pallette='[(#000000,0.0),(#00FF00,0.5),(#FFFFFF,1.0)]'
-```
-
-## Troubleshooting
-
-### Common Issues
-- **Black Images**: May occur with certain complex exponents that cause immediate escape. Try adjusting bailout value or max iterations.
-- **Performance**: High iteration counts or complex formulas may take longer to compute.
-- **Invalid Syntax**: Ensure formulas follow proper mathematical syntax with balanced parentheses.
-
-### Tips
-- Start with lower resolution (e.g., 64x64) for testing new formulas
-- Use moderate max-iteration values initially (e.g., 32-100)
-- Complex exponents may require higher bailout values to visualize properly
-- Non-integer and complex exponents often produce interesting and unique fractal patterns
+This creates entirely new classes of fractals with different mathematical properties and visual characteristics.
 
 ## Examples
 
@@ -116,17 +92,32 @@ cargo run --bin ftk-mandel -- --bounds=-2,2,-2,2 --dimensions=512,512 --formula=
 cargo run --bin ftk-mandel -- --bounds=-2,2,-2,2 --dimensions=512,512 --formula='z^2.5 + c'
 ```
 
-### Complex Exponent
+### Complex Exponent with Standard Imaginary Unit
 ```bash
 cargo run --bin ftk-mandel -- --bounds=-2,2,-2,2 --dimensions=512,512 --formula='z^(2.7+0.3i) + c'
 ```
 
-### Tetration-Based Fractal
+### Complex Exponent with Custom Imaginary Unit (i² = -i)
 ```bash
-cargo run --bin ftk-mandel -- --bounds=-2,2,-2,2 --dimensions=256,256 --formula='z^^z + c' --max-iterations=16
+cargo run --bin ftk-mandel -- --bounds=-2,2,-2,2 --dimensions=512,512 --formula='z^(2.7+0.3i) + c' --i-sqrt-value='-i'
 ```
 
-### Custom Color Palette
+### Complex Exponent with Custom Imaginary Unit (i² = 1-i)
 ```bash
-cargo run --bin ftk-mandel -- --bounds=-2,2,-2,2 --dimensions=512,512 --color-pallette='[(#000000,0.0),(#FF0000,0.33),(#00FF00,0.66),(#FFFFFF,1.0)]' --formula='z^3 + c'
+cargo run --bin ftk-mandel -- --bounds=-2,2,-2,2 --dimensions=512,512 --formula='z^(2.7+0.3i) + c' --i-sqrt-value='1-i'
+```
+
+### Complex Exponent with Custom Imaginary Unit (i² = 0.5+0.5i)
+```bash
+cargo run --bin ftk-mandel -- --bounds=-2,2,-2,2 --dimensions=512,512 --formula='z^(2.7+0.3i) + c' --i-sqrt-value='0.5+0.5i'
+```
+
+### Split-Complex Numbers (i² = 1)
+```bash
+cargo run --bin ftk-mandel -- --bounds=-2,2,-2,2 --dimensions=512,512 --formula='z^2 + c' --i-sqrt-value='1'
+```
+
+### Tetration with Custom Imaginary Unit
+```bash
+cargo run --bin ftk-mandel -- --bounds=-2,2,-2,2 --dimensions=256,256 --formula='z^^z + c' --i-sqrt-value='0.5+0.5i' --max-iterations=16
 ```

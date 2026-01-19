@@ -50,6 +50,45 @@ cargo run --bin ftk-mandel -- --bounds=-2,2,-2,2 --dimensions=512,512 --formula=
 cargo run --bin ftk-mandel -- --bounds=-2,2,-2,2 --dimensions=512,512 --formula='z^(0+2.5i) + c'
 ```
 
+### Custom Imaginary Unit Values
+Explore alternative number systems by defining different values for i²:
+
+#### Standard Complex Numbers (i² = -1)
+```bash
+# Default behavior - no need to specify
+cargo run --bin ftk-mandel -- --bounds=-2,2,-2,2 --dimensions=512,512 --formula='z^2 + c'
+```
+
+#### Alternative Imaginary Unit (i² = -i)
+```bash
+# Creates a different number system where i² = -i
+cargo run --bin ftk-mandel -- --bounds=-2,2,-2,2 --dimensions=512,512 --formula='z^(2.7+0.3i) + c' --i-sqrt-value='-i'
+```
+
+#### Alternative Imaginary Unit (i² = 1-i)
+```bash
+# Creates a different number system where i² = 1-i
+cargo run --bin ftk-mandel -- --bounds=-2,2,-2,2 --dimensions=512,512 --formula='z^(2.7+0.3i) + c' --i-sqrt-value='1-i'
+```
+
+#### Alternative Imaginary Unit (i² = 0.5+0.5i)
+```bash
+# Creates a different number system where i² = 0.5+0.5i
+cargo run --bin ftk-mandel -- --bounds=-2,2,-2,2 --dimensions=512,512 --formula='z^2 + c' --i-sqrt-value='0.5+0.5i'
+```
+
+#### Split-Complex Numbers (i² = 1)
+```bash
+# Creates split-complex numbers where i² = 1
+cargo run --bin ftk-mandel -- --bounds=-2,2,-2,2 --dimensions=512,512 --formula='z^2 + c' --i-sqrt-value='1'
+```
+
+#### Degenerate Case (i² = 0)
+```bash
+# Edge case where i² = 0 (imaginary component collapses)
+cargo run --bin ftk-mandel -- --bounds=-2,2,-2,2 --dimensions=512,512 --formula='z^2 + c' --i-sqrt-value='0'
+```
+
 ### Trigonometric Functions
 Use trigonometric functions in your formulas:
 ```bash
@@ -112,6 +151,16 @@ cargo run --bin ftk-mandel -- --bounds=-2,2,-2,2 --dimensions=128,128 --formula=
 cargo run --bin ftk-mandel -- --bounds=-2,2,-2,2 --dimensions=64,64 --formula='z^^^^z + c' --max-iterations=8
 ```
 
+### Hyperoperations with Custom Imaginary Units
+Combine higher hyperoperations with custom imaginary units:
+```bash
+# Tetration with custom imaginary unit
+cargo run --bin ftk-mandel -- --bounds=-2,2,-2,2 --dimensions=256,256 --formula='z^^z + c' --i-sqrt-value='0.5+0.5i' --max-iterations=16
+
+# Pentation with alternative imaginary unit
+cargo run --bin ftk-mandel -- --bounds=-2,2,-2,2 --dimensions=128,128 --formula='z^^^z + c' --i-sqrt-value='-i' --max-iterations=8
+```
+
 ## Parameter Tuning Examples
 
 ### Adjusting Iterations
@@ -137,23 +186,23 @@ Focus on specific regions of the fractal:
 # Zoom into the spiral area of Mandelbrot
 cargo run --bin ftk-mandel -- --bounds=-0.1,0.1,-0.1,0.1 --dimensions=512,512 --formula='z^2 + c' --max-iterations=500
 
-# Zoom into a complex exponent fractal
-cargo run --bin ftk-mandel -- --bounds=-0.5,0.5,-0.5,0.5 --dimensions=512,512 --formula='z^(2.7+0.3i) + c' --max-iterations=200
+# Zoom into a complex exponent fractal with custom imaginary unit
+cargo run --bin ftk-mandel -- --bounds=-0.5,0.5,-0.5,0.5 --dimensions=512,512 --formula='z^(2.7+0.3i) + c' --i-sqrt-value='1-i' --max-iterations=200
 ```
 
 ## Combining Features
 
-### Complex Formula with Custom Palette
+### Complex Formula with Custom Palette and Imaginary Unit
 Combine multiple features in one command:
 ```bash
-cargo run --bin ftk-mandel -- --bounds=-2,2,-2,2 --dimensions=1024,1024 --formula='z^(3.2-1.4i) + c' --max-iterations=150 --bailout=16 --color-pallette='[(#000000,0.0),(#FF0000,0.25),(#FFFF00,0.5),(#00FF00,0.75),(#FFFFFF,1.0)]' --output='complex_fractal.png'
+cargo run --bin ftk-mandel -- --bounds=-2,2,-2,2 --dimensions=1024,1024 --formula='z^(3.2-1.4i) + c' --max-iterations=150 --bailout=16 --color-pallette='[(#000000,0.0),(#FF0000,0.25),(#FFFF00,0.5),(#00FF00,0.75),(#FFFFFF,1.0)]' --i-sqrt-value='0.5+0.5i' --output='complex_fractal.png'
 ```
 
-### Testing New Formulas
+### Testing New Formulas with Custom Imaginary Units
 Quick test with low resolution:
 ```bash
-# Quick test of a new formula
-cargo run --bin ftk-mandel -- --bounds=-2,2,-2,2 --dimensions=64,64 --formula='sinh(z) + sqrt(z) + c' --max-iterations=32
+# Quick test of a new formula with custom imaginary unit
+cargo run --bin ftk-mandel -- --bounds=-2,2,-2,2 --dimensions=64,64 --formula='sinh(z) + sqrt(z) + c' --max-iterations=32 --i-sqrt-value='-0.5+0.866i'
 ```
 
 ## Troubleshooting Examples
@@ -162,18 +211,18 @@ cargo run --bin ftk-mandel -- --bounds=-2,2,-2,2 --dimensions=64,64 --formula='s
 If you get a black image with complex exponents, try:
 ```bash
 # Increase bailout value
-cargo run --bin ftk-mandel -- --bounds=-2,2,-2,2 --dimensions=512,512 --formula='z^(2.7+0.3i) + c' --bailout=64
+cargo run --bin ftk-mandel -- --bounds=-2,2,-2,2 --dimensions=512,512 --formula='z^(2.7+0.3i) + c' --bailout=64 --i-sqrt-value='-i'
 
 # Reduce iterations
-cargo run --bin ftk-mandel -- --bounds=-2,2,-2,2 --dimensions=512,512 --formula='z^(2.7+0.3i) + c' --max-iterations=16
+cargo run --bin ftk-mandel -- --bounds=-2,2,-2,2 --dimensions=512,512 --formula='z^(2.7+0.3i) + c' --max-iterations=16 --i-sqrt-value='1-i'
 ```
 
 ### Performance Optimization
 For faster testing:
 ```bash
-# Low resolution test
-cargo run --bin ftk-mandel -- --bounds=-2,2,-2,2 --dimensions=32,32 --formula='z^^z + c' --max-iterations=8
+# Low resolution test with custom imaginary unit
+cargo run --bin ftk-mandel -- --bounds=-2,2,-2,2 --dimensions=32,32 --formula='z^^z + c' --max-iterations=8 --i-sqrt-value='0.5+0.5i'
 
 # Then scale up once satisfied
-cargo run --bin ftk-mandel -- --bounds=-2,2,-2,2 --dimensions=256,256 --formula='z^^z + c' --max-iterations=32
+cargo run --bin ftk-mandel -- --bounds=-2,2,-2,2 --dimensions=256,256 --formula='z^^z + c' --max-iterations=32 --i-sqrt-value='0.5+0.5i'
 ```

@@ -1,6 +1,6 @@
 # Monetizing Fractal Renders
 
-Fractal renders offer numerous opportunities for monetization due to their aesthetic appeal and mathematical complexity. Here's how to leverage the Fractal Toolkit's advanced features for commercial purposes.
+Fractal renders offer numerous opportunities for monetization due to their aesthetic appeal and mathematical complexity. With the enhanced capabilities of the Fractal Toolkit, including support for complex exponents and custom imaginary units, there are even more possibilities for creating unique and valuable fractal art.
 
 ## Artistic Applications
 
@@ -8,6 +8,7 @@ Fractal renders offer numerous opportunities for monetization due to their aesth
 - Create unique fractal art with complex exponents (`z^(2.7+0.3i) + c`)
 - Generate intricate patterns using hyperoperations (tetration, pentation, hexation)
 - Use trigonometric functions (`sin(z) + c`, `cos(z) + c`) for organic-looking patterns
+- Explore alternative number systems with the `--i-sqrt-value` parameter to create truly unique patterns
 - Print high-resolution fractals as wall art or canvas prints
 
 ### NFT Creation
@@ -15,19 +16,22 @@ Fractal renders offer numerous opportunities for monetization due to their aesth
 - Create series with slight variations in formula parameters
 - Use the toolkit's custom color palette feature for unique aesthetics
 - Leverage the infinite detail of fractals for zoomable NFTs
+- Create NFTs using alternative number systems (different values of i²) for truly unique mathematical art
 
 ## Educational Applications
 
 ### Teaching Materials
 - Visualize complex mathematical concepts like tetration and pentation
 - Demonstrate complex exponentiation with formulas like `z^(a+bi)`
-- Show convergence and divergence patterns in mathematical systems
-- Create educational content about hyperoperations
+- Show how changing the imaginary unit (i² ≠ -1) affects fractal structures
+- Create educational content about hyperoperations and alternative number systems
+- Compare standard complex numbers (i² = -1) with alternative systems (i² = -i, i² = 1-i, etc.)
 
 ### Course Content
 - Develop online courses about fractal mathematics
 - Create interactive learning materials using the toolkit's adjustable parameters
 - Demonstrate how small changes in formulas create dramatically different patterns
+- Show the mathematical implications of different imaginary unit definitions
 
 ## Commercial Applications
 
@@ -48,12 +52,23 @@ Fractal renders offer numerous opportunities for monetization due to their aesth
 ### Leveraging Complex Exponents
 - Use formulas like `z^(2.7+0.3i) + c` for unique visual effects
 - Experiment with different complex exponent values to create distinctive patterns
-- Combine complex exponents with trigonometric functions for hybrid effects
+- Combine complex exponents with custom imaginary units for even more uniqueness
+- Use the `--i-sqrt-value` parameter to explore alternative number systems
 
 ### Hyperoperation-Based Fractals
 - Tetration-based fractals (`z^^z + c`) offer unique structural properties
 - Pentation and hexation create extremely complex patterns suitable for premium products
 - These advanced operations create truly unique artwork difficult to replicate
+- Combine hyperoperations with custom imaginary units for unprecedented visual effects
+
+### Custom Imaginary Units
+The `--i-sqrt-value` parameter opens up new possibilities:
+- Standard complex numbers: `--i-sqrt-value='-1'` (i² = -1)
+- Alternative systems: `--i-sqrt-value='-i'` (i² = -i)
+- Split-complex numbers: `--i-sqrt-value='1'` (i² = 1)
+- Other complex values: `--i-sqrt-value='0.5+0.5i'` (i² = 0.5+0.5i)
+
+These alternative number systems create fractals with completely different mathematical properties and visual characteristics.
 
 ### Custom Color Palettes
 - Develop signature color schemes for brand recognition
@@ -64,7 +79,7 @@ Fractal renders offer numerous opportunities for monetization due to their aesth
 
 ### Showcase Unique Capabilities
 - Highlight the toolkit's ability to handle complex exponents
-- Demonstrate the variety of hyperoperations available
+- Demonstrate the custom imaginary unit feature (`--i-sqrt-value`)
 - Show before/after comparisons of parameter adjustments
 - Feature the mathematical precision behind the art
 
@@ -73,6 +88,7 @@ Fractal renders offer numerous opportunities for monetization due to their aesth
 - Digital artists looking for algorithmic art tools
 - Game developers needing organic textures
 - Interior designers seeking unique art pieces
+- Researchers in complex dynamics and chaos theory
 
 ## Technical Considerations
 
@@ -105,4 +121,4 @@ Fractal renders offer numerous opportunities for monetization due to their aesth
 - Provide access to premium formulas or techniques
 - Deliver educational content about fractal mathematics
 
-With the Fractal Toolkit's advanced capabilities including complex exponents, hyperoperations, and extensive function support, there are virtually unlimited possibilities for creating unique, monetizable fractal art.
+With the Fractal Toolkit's advanced capabilities including complex exponents, hyperoperations, custom imaginary units, and extensive function support, there are virtually unlimited possibilities for creating unique, monetizable fractal art.
