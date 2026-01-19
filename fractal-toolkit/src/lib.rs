@@ -173,7 +173,7 @@ impl MathEvaluator {
     }
 
     /// Evaluate a mathematical formula with a parameter for complex numbers and custom imaginary unit
-    pub fn evaluate_formula_with_param_and_custom_i(formula: &str, z: Complex<f64>, param: Complex<f64>, custom_i: Complex<f64>) -> Result<Complex<f64>, String> {
+    pub fn evaluate_formula_with_param_and_custom_i(formula: &str, z: Complex<f64>, param: Complex<f64>, _custom_i: Complex<f64>) -> Result<Complex<f64>, String> {
         let formula_lower = formula.trim().to_lowercase();
 
         match formula_lower.as_str() {
@@ -208,7 +208,7 @@ impl MathEvaluator {
             "z^2 + c*log(z)" => Ok(z * z + param * z.ln()),
             _ => {
                 // For more complex expressions, try to parse them with custom imaginary unit
-                ExpressionParser::evaluate_with_custom_i(formula, z, param, custom_i)
+                ExpressionParser::evaluate_with_custom_i(formula, z, param, _custom_i)
             }
         }
     }
@@ -228,7 +228,7 @@ impl ExpressionParser {
     }
 
     /// Evaluate a mathematical expression with complex numbers and custom imaginary unit
-    pub fn evaluate_with_custom_i(formula: &str, z: Complex<f64>, param: Complex<f64>, custom_i: Complex<f64>) -> Result<Complex<f64>, String> {
+    pub fn evaluate_with_custom_i(formula: &str, z: Complex<f64>, param: Complex<f64>, _custom_i: Complex<f64>) -> Result<Complex<f64>, String> {
         // For now, just call the regular evaluate function
         // In a full implementation, we would need to create a new parser that handles the custom i
         Self::evaluate(formula, z, param)

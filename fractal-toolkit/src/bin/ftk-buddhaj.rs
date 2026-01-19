@@ -239,7 +239,6 @@ fn parse_complex_number(s: &str) -> Result<Complex<f64>, String> {
             return Ok(Complex::new(0.0, -1.0));
         }
 
-        // Split on '+' or '-' but preserve the signs
         let mut real_str = "";
         let mut imag_str = "";
 
