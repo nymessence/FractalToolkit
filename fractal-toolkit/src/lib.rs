@@ -2452,8 +2452,8 @@ pub fn generate_domain_color_plot(params: &DomainColorParams) -> image::RgbImage
             // Convert pixel coordinates to complex plane coordinates
             let z = pixel_to_complex(x, y, params.width, params.height, params.bounds);
 
-            // Evaluate the complex function
-            let result = match evaluate_complex_function(&params.formula, z) {
+            // Evaluate the complex function with custom imaginary unit
+            let result = match evaluate_complex_function_with_custom_i(&params.formula, z, params.i_sqrt_value) {
                 Ok(value) => value,
                 Err(_) => Complex::new(0.0, 0.0), // Default to zero if evaluation fails
             };
@@ -2513,6 +2513,20 @@ fn evaluate_complex_function(formula: &str, z: Complex<f64>) -> Result<Complex<f
 
     // Use the existing expression parser
     MathEvaluator::parse_and_evaluate(formula, z, param)
+}
+
+/// Evaluate a complex function with a given formula and custom imaginary unit
+fn evaluate_complex_function_with_custom_i(formula: &str, z: Complex<f64>, custom_i: Complex<f64>) -> Result<Complex<f64>, String> {
+    // Use the existing sophisticated parser with custom imaginary unit
+    let formula = formula.trim();
+
+    // For fractal generation, 'c' typically represents the point in the complex plane
+    // For Mandelbrot: z^2 + c where c is the coordinate
+    // For Julia: z^2 + c where c is a fixed constant
+    let param = z; // For Mandelbrot, param is the coordinate; for Julia, it would be fixed
+
+    // Use the existing expression parser with custom imaginary unit
+    MathEvaluator::evaluate_formula_with_param_and_custom_i(formula, z, param, custom_i)
 }
 
 /// Convert HSV color values to RGB
