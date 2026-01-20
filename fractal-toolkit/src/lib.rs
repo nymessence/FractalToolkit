@@ -46,6 +46,7 @@ use std::f64::consts::PI;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use chrono::Local;
+use image::{ImageBuffer, Rgba};
 
 /// Custom complex number system with configurable imaginary unit
 ///
@@ -3603,3 +3604,160 @@ fn custom_complex_square(z: Complex<f64>, i_squared: Complex<f64>) -> Complex<f6
     
     Complex::new(real_part, imag_part)
 }
+
+/// Generate a Mandelbrot set image with domain coloring support
+/// 
+/// This function generates a Mandelbrot set image where points that don't escape are colored based on their final complex value
+/// rather than just the iteration count. This creates colorful visualizations that reveal the structure of the complex function.
+/// 
+/// # Arguments
+/// 
+/// * `width` - Width of the output image in pixels
+/// * `height` - Height of the output image in pixels  
+/// * `params` - Fractal parameters including bounds, max_iterations, formula, and custom imaginary unit
+/// * `no_bailout` - If true, disables the bailout threshold for fully domain-colored plots
+/// * `color_palette` - Optional color palette for coloring the image
+/// 
+/// # Returns
+/// 
+/// An RGBA image buffer representing the Mandelbrot set with domain coloring
+pub fn generate_mandelbrot_domain_color_image(
+    width: u32,
+    height: u32,
+    params: &FractalParams,
+    no_bailout: bool,
+    color_palette: Option<&Vec<ColorStop>>
+) -> ImageBuffer<Rgba<u8>, Vec<u8>> {
+    use rayon::prelude::*;
+    
+    let bounds = params.bounds;
+    let params_arc = Arc::new(params.clone());
+    
+    // Calculate step sizes for mapping pixels to complex plane
+    let dx = (bounds[1] - bounds[0]) / width as f64;
+    let dy = (bounds[3] - bounds[2]) / height as f64;
+    
+    // Process rows in parallel
+    let rows: Vec<Vec<Rgba<u8>>> = (0..height)
+        .into_par_iter()
+        .map(|y| {
+            let mut row = Vec::with_capacity(width as usize);
+            for x in 0..width {
+                // Convert pixel coordinates to complex plane coordinates
+                let c = Complex::new(
+                    bounds[0] + x as f64 * dx,
+                    bounds[2] + y as f64 * dy,
+                );
+                
+                // Calculate the final value for domain coloring
+                let final_value = mandelbrot_final_value(c, &params_arc, no_bailout);
+                
+                // Map the complex value to a color using domain coloring
+                let color = complex_to_domain_color(final_value, color_palette);
+                row.push(color);
+            }
+            row
+        })
+        .collect();
+    
+    // Flatten the rows into a single vector
+    let pixels: Vec<Rgba<u8>> = rows.into_iter().flatten().collect();
+    
+    // Flatten the pixel data into a single vector of bytes
+    let mut pixel_bytes = Vec::with_capacity((width * height * 4) as usize);
+    for pixel in pixels {
+        pixel_bytes.extend_from_slice(&pixel.0);
+    }
+
+    // Create the final image from the flattened pixel data
+    ImageBuffer::from_raw(width, height, pixel_bytes).unwrap()
+}
+
+/// Calculate the final complex value for a point in the Mandelbrot set for domain coloring
+/// 
+/// This function iterates the Mandelbrot formula but returns the final complex value instead of iteration count
+/// 
+/// # Arguments
+/// 
+/// * `c` - The complex number representing the point in the complex plane
+/// * `params` - Fractal parameters including max_iterations, formula, and custom imaginary unit
+/// * `no_bailout` - If true, disables the bailout threshold for fully domain-colored plots
+/// 
+/// # Returns
+/// 
+/// The final complex value after iteration (either escaped value or final bounded value)
+pub fn mandelbrot_final_value(c: Complex<f64>, params: &FractalParams, no_bailout: bool) -> Complex<f64> {
+    let mut z = Complex::new(0.0, 0.0);
+    let mut iter = 0;
+
+    while iter < params.max_iterations {
+        // Use the formula specified in params, defaulting to z^2 + c if evaluation fails
+        z = match MathEvaluator::evaluate_formula_with_param_and_custom_i(&params.formula, z, c, params.i_sqrt_value) {
+            Ok(result) => result,
+            Err(_e) => z * z + c, // Fallback to standard formula
+        };
+
+        // If no_bailout is true, continue iterating for all points
+        if !no_bailout && z.norm_sqr() > params.bailout * params.bailout {
+            // For escaping points, return the final value before escape
+            // This preserves phase information for domain coloring
+            return z;
+        }
+        iter += 1;
+    }
+
+    // For non-escaping points, return the final value after max iterations
+    // This preserves the complex value for domain coloring
+    z
+}
+
+/// Convert a complex number to a color using domain coloring technique
+/// 
+/// Domain coloring maps complex numbers to colors based on their argument (hue) and magnitude (brightness/lightness)
+/// 
+/// # Arguments
+/// 
+/// * `z` - The complex number to convert to a color
+/// * `color_palette` - Optional color palette to use for coloring
+/// 
+/// # Returns
+/// 
+/// An RGBA color representing the complex number
+fn complex_to_domain_color(z: Complex<f64>, color_palette: Option<&Vec<ColorStop>>) -> Rgba<u8> {
+    if z.re.is_nan() || z.im.is_nan() || z.re.is_infinite() || z.im.is_infinite() {
+        // For invalid values, return black
+        return Rgba([0, 0, 0, 255]);
+    }
+    
+    // Calculate the argument (angle) of the complex number, normalized to [0, 1]
+    let arg = z.arg(); // Returns value in [-π, π]
+    let hue = (arg + std::f64::consts::PI) / (2.0 * std::f64::consts::PI); // Normalize to [0, 1]
+    
+    // Calculate the magnitude (absolute value) of the complex number
+    let mag = z.norm();
+    
+    // Use the magnitude to determine brightness/lightness
+    // For domain coloring, we often use a logarithmic scale to handle large ranges
+    let log_mag = if mag > 0.0 { mag.ln() } else { -100.0 }; // Use -100 for zero to avoid -inf
+    
+    // Determine which band the magnitude falls into (for contouring effect)
+    let band = (log_mag / std::f64::consts::TAU).floor(); // TAU = 2*PI
+    let intensity = (band % 2.0).abs(); // Alternating bands
+    
+    // If a color palette is provided, use it; otherwise use HSV mapping
+    if let Some(palette) = color_palette {
+        // Use the color palette for domain coloring
+        let normalized_mag = if mag > 0.0 {
+            (log_mag / std::f64::consts::PI).rem_euclid(1.0)
+        } else {
+            0.0
+        };
+        interpolate_color_from_palette(normalized_mag, palette)
+    } else {
+        // Convert HSV to RGB using the hue and intensity
+        let rgb = hsv_to_rgb(hue, 1.0, intensity);
+        Rgba([rgb[0], rgb[1], rgb[2], 255])
+    }
+}
+
+

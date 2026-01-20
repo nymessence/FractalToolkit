@@ -143,6 +143,14 @@ struct Args {
     /// Point coordinates for orbit debugging [real, imag] (requires --orbit-debug)
     #[arg(long, value_delimiter = ',', num_args = 1..=2, default_values_t = [0.0, 0.0])]
     debug_point: Vec<f64>,
+
+    /// Enable domain coloring mode to color points based on their final complex value
+    #[arg(long)]
+    domain_color: bool,
+
+    /// Disable bailout threshold for fully domain-colored plots (use with --domain-color)
+    #[arg(long)]
+    no_bailout: bool,
 }
 
 fn main() {
@@ -234,7 +242,12 @@ fn main() {
     };
 
     // Generate the fractal image
-    let img = generate_mandelbrot_image(width, height, &params, color_palette.as_ref());
+    let img = if args.domain_color {
+        // Use domain coloring mode
+        fractal_toolkit::generate_mandelbrot_domain_color_image(width, height, &params, args.no_bailout, color_palette.as_ref())
+    } else {
+        generate_mandelbrot_image(width, height, &params, color_palette.as_ref())
+    };
 
     // Save the image
     img.save(&args.output).expect("Failed to save image");
