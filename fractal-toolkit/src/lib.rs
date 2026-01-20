@@ -3761,3 +3761,51 @@ fn complex_to_domain_color(z: Complex<f64>, color_palette: Option<&Vec<ColorStop
 }
 
 
+
+/// Helper function to compute custom complex multiplication with custom imaginary unit
+/// (a + bi) * (c + di) = ac + ad*i + bc*i + bd*i^2 where i^2 is the custom value
+fn custom_complex_multiply(z1: Complex<f64>, z2: Complex<f64>, i_squared: Complex<f64>) -> Complex<f64> {
+    let a = z1.re;
+    let b = z1.im;
+    let c = z2.re;
+    let d = z2.im;
+    
+    // (a + bi) * (c + di) = ac + ad*i + bc*i + bd*i^2
+    // = ac + (ad + bc)*i + bd*i^2
+    let ac = a * c;
+    let ad = a * d;
+    let bc = b * c;
+    let bd = b * d;
+    
+    // bd * i^2 where i^2 is our custom value
+    let bd_i_squared = bd * i_squared;
+    
+    // Real part: ac + Re(bd * i^2)
+    let real_part = ac + bd_i_squared.re;
+    // Imaginary part: (ad + bc) + Im(bd * i^2)
+    let imag_part = (ad + bc) + bd_i_squared.im;
+    
+    Complex::new(real_part, imag_part)
+}
+
+/// Helper function to compute custom complex square with custom imaginary unit
+/// In this system, (a + bi)^2 = a^2 + 2abi + b^2*i^2 where i^2 is the custom value
+fn custom_complex_square(z: Complex<f64>, i_squared: Complex<f64>) -> Complex<f64> {
+    let a = z.re;
+    let b = z.im;
+    
+    // (a + bi)^2 = a^2 + 2abi + b^2*i^2
+    let a_sq = a * a;
+    let two_ab = 2.0 * a * b;
+    let b_sq = b * b;
+    
+    // b^2 * i^2 where i^2 is our custom value
+    let b_sq_i_squared = b_sq * i_squared;
+    
+    // Real part: a^2 + Re(b^2 * i^2)
+    let real_part = a_sq + b_sq_i_squared.re;
+    // Imaginary part: 2ab + Im(b^2 * i^2)
+    let imag_part = two_ab + b_sq_i_squared.im;
+    
+    Complex::new(real_part, imag_part)
+}
