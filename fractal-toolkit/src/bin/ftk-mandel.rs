@@ -19,6 +19,8 @@ fn parse_complex_number(s: &str) -> Result<Complex<f64>, String> {
     // Handle simple cases first
     if s == "i" || s == "I" {
         return Ok(Complex::new(0.0, 1.0));
+    } else if s == "-i" || s == "-I" {
+        return Ok(Complex::new(0.0, -1.0));
     }
 
     // Try to parse as a real number
@@ -26,73 +28,83 @@ fn parse_complex_number(s: &str) -> Result<Complex<f64>, String> {
         return Ok(Complex::new(real_val, 0.0));
     }
 
-    // Handle complex number format like "a+bi", "a-bi", "a+b*i", etc.
-    let mut real_part = 0.0;
-    let mut imag_part = 0.0;
+    // Handle complex number format like "a+bi", "a-bi", "a+i", "a-i", etc.
+    let s = s.replace(" ", "").replace("*", ""); // Remove spaces and multiplication symbols
 
-    // Check if it contains 'i' or 'I'
-    if s.contains('i') || s.contains('I') {
-        let s = s.replace(" ", ""); // Remove spaces
-        let s = s.replace("*", ""); // Remove multiplication symbols
-
-        // Handle cases like "i", "-i", "+i"
-        if s == "i" || s == "+i" || s == "I" || s == "+I" {
-            return Ok(Complex::new(0.0, 1.0));
-        } else if s == "-i" || s == "-I" {
-            return Ok(Complex::new(0.0, -1.0));
+    // Find all positions of + and - that are not at the beginning
+    let mut plus_minus_positions = Vec::new();
+    for (i, c) in s.char_indices() {
+        if (c == '+' || c == '-') && i > 0 {
+            plus_minus_positions.push(i);
         }
-
-        #[allow(unused_assignments)]
-        let mut real_str = "";
-        #[allow(unused_assignments)]
-        let mut imag_str = "";
-
-        // Find the position of the imaginary part
-        if let Some(i_pos) = s.find(|c| c == 'i' || c == 'I') {
-            let before_i = &s[..i_pos];
-
-            // Look for the last occurrence of + or - before the i
-            if let Some(last_sign_pos) = before_i.rfind(|c: char| c == '+' || c == '-') {
-                if last_sign_pos == 0 {
-                    // Starts with a sign, e.g., "-2.5i" or "+3.2i"
-                    real_str = "0";
-                    imag_str = &s;
-                } else {
-                    // Has both real and imaginary parts, e.g., "1.5+2.3i"
-                    real_str = &s[..last_sign_pos];
-                    imag_str = &s[last_sign_pos..i_pos];
-                }
-            } else {
-                // Just an imaginary number, e.g., "2.5i"
-                real_str = "0";
-                imag_str = &s[..i_pos];
-            }
-
-            // Parse real part
-            if !real_str.is_empty() {
-                real_part = real_str.parse::<f64>().map_err(|_| format!("Invalid real part: {}", real_str))?;
-            }
-
-            // Parse imaginary part
-            if !imag_str.is_empty() {
-                if imag_str == "+" || imag_str == "" {
-                    imag_part = 1.0;
-                } else if imag_str == "-" {
-                    imag_part = -1.0;
-                } else {
-                    imag_part = imag_str.parse::<f64>().map_err(|_| format!("Invalid imaginary part: {}", imag_str))?;
-                }
-            }
-        } else {
-            // Just a real number
-            real_part = s.parse::<f64>().map_err(|_| format!("Invalid number: {}", s))?;
-        }
-    } else {
-        // Just a real number
-        real_part = s.parse::<f64>().map_err(|_| format!("Invalid number: {}", s))?;
     }
 
-    Ok(Complex::new(real_part, imag_part))
+    // Find the position of 'i' or 'I'
+    let i_pos = s.find(|c| c == 'i' || c == 'I');
+
+    if let Some(i_pos) = i_pos {
+        // Complex number with imaginary part
+        if plus_minus_positions.is_empty() {
+            // Format like "ai" or "bi" where a or b is the coefficient
+            let coeff_str = &s[..i_pos];
+            if coeff_str.is_empty() || coeff_str == "+" {
+                return Ok(Complex::new(0.0, 1.0)); // Just "i"
+            } else if coeff_str == "-" {
+                return Ok(Complex::new(0.0, -1.0)); // Just "-i"
+            } else {
+                let coeff = coeff_str.parse::<f64>()
+                    .map_err(|_| format!("Invalid imaginary coefficient: {}", coeff_str))?;
+                return Ok(Complex::new(0.0, coeff));
+            }
+        } else {
+            // Complex number with both real and imaginary parts, like "a+bi" or "a-bi"
+            // Find the last + or - before the i
+            let mut last_sign_before_i = None;
+            for &pos in plus_minus_positions.iter().rev() {
+                if pos < i_pos {
+                    last_sign_before_i = Some(pos);
+                    break;
+                }
+            }
+
+            let (real_part, imag_coeff) = if let Some(sign_pos) = last_sign_before_i {
+                // Split at the last sign before i
+                let real_str = &s[..sign_pos];
+                let imag_str = &s[sign_pos..i_pos];
+
+                let real_part = if real_str.is_empty() {
+                    0.0
+                } else {
+                    real_str.parse::<f64>()
+                        .map_err(|_| format!("Invalid real part: {}", real_str))?
+                };
+
+                let imag_coeff = if imag_str.is_empty() || imag_str == "+" {
+                    1.0
+                } else if imag_str == "-" {
+                    -1.0
+                } else {
+                    imag_str.parse::<f64>()
+                        .map_err(|_| format!("Invalid imaginary coefficient: {}", imag_str))?
+                };
+
+                (real_part, imag_coeff)
+            } else {
+                // Format like "a i" or "bi" where i is preceded by a coefficient
+                let real_str = &s[..i_pos];
+                let real_part = real_str.parse::<f64>()
+                    .map_err(|_| format!("Invalid real part: {}", real_str))?;
+                (real_part, 1.0) // Assume coefficient of 1 if not specified
+            };
+
+            Ok(Complex::new(real_part, imag_coeff))
+        }
+    } else {
+        // Just a real number (already handled above, but as a fallback)
+        s.parse::<f64>()
+            .map(|real_val| Complex::new(real_val, 0.0))
+            .map_err(|_| format!("Invalid number: {}", s))
+    }
 }
 
 #[derive(Parser)]
@@ -193,8 +205,9 @@ fn main() {
     let bounds = [args.bounds[0], args.bounds[1], args.bounds[2], args.bounds[3]];
 
     // Parse the custom i_sqrt_value
-    let i_sqrt_complex = parse_complex_number(&args.i_sqrt_value).unwrap_or_else(|_| {
-        eprintln!("Error parsing i_sqrt_value, using default (0,1) for standard i");
+    let i_sqrt_complex = parse_complex_number(&args.i_sqrt_value).unwrap_or_else(|e| {
+        eprintln!("Error parsing i_sqrt_value '{}': {}", args.i_sqrt_value, e);
+        eprintln!("Using default (0,1) for standard i (i² = -1)");
         num_complex::Complex::new(0.0, 1.0)
     });
 
