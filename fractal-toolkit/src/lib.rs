@@ -222,9 +222,23 @@ impl MathEvaluator {
         let formula_lower = formula.trim().to_lowercase();
 
         match formula_lower.as_str() {
-            "z^2 + c" => Ok(z * z + param),
-            "z^3 + c" => Ok(z * z * z + param),
-            "z^4 + c" => Ok(z * z * z * z + param),
+            "z^2 + c" => {
+                // Use custom complex arithmetic for z^2
+                let z_sq = custom_complex_square(z, custom_i);
+                Ok(z_sq + param)
+            },
+            "z^3 + c" => {
+                // Use custom complex arithmetic for z^3 = z^2 * z
+                let z_sq = custom_complex_square(z, custom_i);
+                let z_cu = custom_complex_multiply(z_sq, z, custom_i);
+                Ok(z_cu + param)
+            },
+            "z^4 + c" => {
+                // Use custom complex arithmetic for z^4 = z^2 * z^2
+                let z_sq = custom_complex_square(z, custom_i);
+                let z_quad = custom_complex_multiply(z_sq, z_sq, custom_i);
+                Ok(z_quad + param)
+            },
             "sin(z) + c" => Ok(z.sin() + param),
             "cos(z) + c" => Ok(z.cos() + param),
             "tan(z) + c" => Ok(z.tan() + param),
@@ -3268,4 +3282,52 @@ fn custom_complex_to_string(c: Complex<f64>) -> String {
             format!("{}{}i", c.re, c.im)  // Note: c.im already has the sign
         }
     }
+}
+
+/// Helper function to compute custom complex multiplication with custom imaginary unit
+/// (a + bi) * (c + di) = ac + ad*i + bc*i + bd*i^2 where i^2 is the custom value
+fn custom_complex_multiply(z1: Complex<f64>, z2: Complex<f64>, i_squared: Complex<f64>) -> Complex<f64> {
+    let a = z1.re;
+    let b = z1.im;
+    let c = z2.re;
+    let d = z2.im;
+    
+    // (a + bi) * (c + di) = ac + ad*i + bc*i + bd*i^2
+    // = ac + (ad + bc)*i + bd*i^2
+    let ac = a * c;
+    let ad = a * d;
+    let bc = b * c;
+    let bd = b * d;
+    
+    // bd * i^2 where i^2 is our custom value
+    let bd_i_squared = bd * i_squared;
+    
+    // Real part: ac + Re(bd * i^2)
+    let real_part = ac + bd_i_squared.re;
+    // Imaginary part: (ad + bc) + Im(bd * i^2)
+    let imag_part = (ad + bc) + bd_i_squared.im;
+    
+    Complex::new(real_part, imag_part)
+}
+
+/// Helper function to compute custom complex square with custom imaginary unit
+/// In this system, (a + bi)^2 = a^2 + 2abi + b^2*i^2 where i^2 is the custom value
+fn custom_complex_square(z: Complex<f64>, i_squared: Complex<f64>) -> Complex<f64> {
+    let a = z.re;
+    let b = z.im;
+    
+    // (a + bi)^2 = a^2 + 2abi + b^2*i^2
+    let a_sq = a * a;
+    let two_ab = 2.0 * a * b;
+    let b_sq = b * b;
+    
+    // b^2 * i^2 where i^2 is our custom value
+    let b_sq_i_squared = b_sq * i_squared;
+    
+    // Real part: a^2 + Re(b^2 * i^2)
+    let real_part = a_sq + b_sq_i_squared.re;
+    // Imaginary part: 2ab + Im(b^2 * i^2)
+    let imag_part = two_ab + b_sq_i_squared.im;
+    
+    Complex::new(real_part, imag_part)
 }
