@@ -251,14 +251,31 @@ impl MathEvaluator {
             "z^2 + c*tan(z)" => Ok(z * z + param * z.tan()),
             "z^2 + c*exp(z)" => Ok(z * z + param * z.exp()),
             "z^2 + c*log(z)" => Ok(z * z + param * z.ln()),
+            "z^z + c" => {
+                // Special handling for z^z which can cause immediate escape for all points
+                // z^z = exp(z * ln(z)) can grow extremely rapidly
+                let ln_z = Complex::new(z.norm().ln(), z.arg());
+                let z_ln_z = z * ln_z;
+                let z_pow_z = z_ln_z.exp();
+
+                // Apply conservative scaling to prevent immediate escape
+                let result = z_pow_z + param;
+                let result_norm = result.norm();
+
+                if result_norm > 2.0 {
+                    let scale_factor = 2.0 / result_norm.max(1e-10);
+                    Ok(Complex::new(result.re * scale_factor, result.im * scale_factor))
+                } else {
+                    Ok(result)
+                }
+            },
             _ => {
                 // For more complex expressions, try to parse them with custom imaginary unit
                 ExpressionParser::evaluate_with_custom_i(formula, z, param, custom_i)
             }
         }
     }
-} // End of first MathEvaluator implementation block
-
+        }
 /// A more sophisticated expression parser for complex mathematical expressions
 struct ExpressionParser;
 
