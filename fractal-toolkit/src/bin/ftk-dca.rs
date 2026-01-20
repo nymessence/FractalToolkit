@@ -35,6 +35,10 @@ struct Args {
     /// Custom imaginary unit value (i = sqrt of this value), defaults to -1 if unspecified
     #[arg(long, default_value = "-1")]
     i_sqrt_value: String,
+
+    /// Enable orbit debugging to trace the iteration path for a specific point
+    #[arg(long)]
+    orbit_debug: bool,
 }
 
 fn main() {
@@ -70,6 +74,15 @@ fn main() {
         eprintln!("Error parsing i_sqrt_value, using default (0,1) for standard i");
         num_complex::Complex::new(0.0, 1.0)
     });
+
+    // If orbit debugging is enabled, trace the orbit for a specific point
+    if args.orbit_debug {
+        // Use a central point in the view for debugging
+        let debug_point = num_complex::Complex::new(0.0, 0.0);
+        println!("Orbit debug for point: {:?}", debug_point);
+        fractal_toolkit::trace_orbit_dca(debug_point, &args.formula, i_sqrt_complex);
+        return; // Exit after debugging
+    }
 
     // Create domain color parameters
     let params = DomainColorParams {

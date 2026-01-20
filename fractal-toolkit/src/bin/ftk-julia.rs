@@ -135,6 +135,10 @@ struct Args {
     /// Custom imaginary unit value (i = sqrt of this value), defaults to -1 if unspecified
     #[arg(long, default_value = "-1")]
     i_sqrt_value: String,
+
+    /// Enable orbit debugging to trace the iteration path for a specific point
+    #[arg(long)]
+    orbit_debug: bool,
 }
 
 fn main() {
@@ -192,6 +196,15 @@ fn main() {
         formula_clone,
     );
     params.i_sqrt_value = i_sqrt_complex;
+
+    // If orbit debugging is enabled, trace the orbit for a specific point
+    if args.orbit_debug {
+        // Use a central point in the view for debugging
+        let debug_point = num_complex::Complex::new(0.0, 0.0);
+        println!("Orbit debug for point: {:?}", debug_point);
+        fractal_toolkit::trace_orbit_julia(debug_point, &params);
+        return; // Exit after debugging
+    }
 
     // Parse color palette if provided
     let color_palette = if let Some(ref palette_str) = args.color_pallette {

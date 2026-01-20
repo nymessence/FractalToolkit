@@ -3097,3 +3097,147 @@ pub fn trace_orbit_mandelbrot(c: Complex<f64>, params: &FractalParams) {
     
     println!();
 }
+
+/// Trace the orbit of a point in the Julia set for debugging purposes
+pub fn trace_orbit_julia(z: Complex<f64>, params: &FractalParams) {
+    println!("Tracing orbit for Julia set with:");
+    println!("  Point z: {:?}", z);
+    println!("  Formula: {}", params.formula);
+    println!("  Custom i² value: {:?}", params.i_sqrt_value);
+    println!("  Max iterations: {}", params.max_iterations);
+    println!("  Bailout: {}", params.bailout);
+    println!();
+
+    let c = params.spawn;  // Use spawn point as the constant for Julia set
+    let mut z = z;
+    let mut iter = 0;
+
+    while iter < params.max_iterations {
+        println!("  Iteration {}: z = ({:.6}, {:.6}), |z| = {:.6}", 
+                 iter + 1, z.re, z.im, z.norm());
+
+        // Use the formula specified in params, defaulting to z^2 + c if evaluation fails
+        z = match MathEvaluator::evaluate_formula_with_param_and_custom_i(&params.formula, z, c, params.i_sqrt_value) {
+            Ok(result) => result,
+            Err(_) => z * z + c, // Fallback to standard Julia formula
+        };
+
+        if z.norm_sqr() > params.bailout * params.bailout {
+            println!("  Point escapes at iteration {}", iter + 1);
+            break;
+        }
+        
+        iter += 1;
+    }
+    
+    if iter >= params.max_iterations {
+        println!("  Point remains bounded after {} iterations", params.max_iterations);
+    }
+    
+    println!();
+}
+
+/// Trace the orbit of a point in the Buddhabrot for debugging purposes
+pub fn trace_orbit_buddha(z: Complex<f64>, params: &BuddhabrotParams) {
+    println!("Tracing orbit for Buddhabrot with:");
+    println!("  Point z: {:?}", z);
+    println!("  Formula: {}", params.formula);
+    println!("  Custom i² value: {:?}", params.i_sqrt_value);
+    println!("  Max iterations: {}", params.max_iterations);
+    println!("  Bailout: {}", params.bailout);
+    println!();
+
+    let c = z;  // In Buddhabrot, we iterate with z as the starting point and c as the parameter
+    let mut z = z;
+    let mut iter = 0;
+
+    while iter < params.max_iterations {
+        println!("  Iteration {}: z = ({:.6}, {:.6}), |z| = {:.6}", 
+                 iter + 1, z.re, z.im, z.norm());
+
+        // Use the formula specified in params, defaulting to z^2 + c if evaluation fails
+        z = match MathEvaluator::evaluate_formula_with_param_and_custom_i(&params.formula, z, c, params.i_sqrt_value) {
+            Ok(result) => result,
+            Err(_) => z * z + c, // Fallback to standard formula
+        };
+
+        if z.norm_sqr() > params.bailout * params.bailout {
+            println!("  Point escapes at iteration {}", iter + 1);
+            break;
+        }
+        
+        iter += 1;
+    }
+    
+    if iter >= params.max_iterations {
+        println!("  Point remains bounded after {} iterations", params.max_iterations);
+    }
+    
+    println!();
+}
+
+/// Trace the orbit of a point in the Buddhabrot Julia for debugging purposes
+pub fn trace_orbit_buddhaj(z: Complex<f64>, params: &BuddhabrotJuliaParams) {
+    println!("Tracing orbit for Buddhabrot Julia with:");
+    println!("  Point z: {:?}", z);
+    println!("  Formula: {}", params.formula);
+    println!("  Custom i² value: {:?}", params.i_sqrt_value);
+    println!("  Max iterations: {}", params.max_iterations);
+    println!("  Bailout: {}", params.bailout);
+    println!();
+
+    let c = params.spawn;  // Use spawn point as the constant for Julia set
+    let mut z = z;
+    let mut iter = 0;
+
+    while iter < params.max_iterations {
+        println!("  Iteration {}: z = ({:.6}, {:.6}), |z| = {:.6}", 
+                 iter + 1, z.re, z.im, z.norm());
+
+        // Use the formula specified in params, defaulting to z^2 + c if evaluation fails
+        z = match MathEvaluator::evaluate_formula_with_param_and_custom_i(&params.formula, z, c, params.i_sqrt_value) {
+            Ok(result) => result,
+            Err(_) => z * z + c, // Fallback to standard Julia formula
+        };
+
+        if z.norm_sqr() > params.bailout * params.bailout {
+            println!("  Point escapes at iteration {}", iter + 1);
+            break;
+        }
+        
+        iter += 1;
+    }
+    
+    if iter >= params.max_iterations {
+        println!("  Point remains bounded after {} iterations", params.max_iterations);
+    }
+    
+    println!();
+}
+
+/// Trace the orbit of a point in the domain color plot for debugging purposes
+pub fn trace_orbit_dca(z: Complex<f64>, formula: &str, custom_i: Complex<f64>) {
+    println!("Tracing orbit for domain color plot with:");
+    println!("  Point z: {:?}", z);
+    println!("  Formula: {}", formula);
+    println!("  Custom i² value: {:?}", custom_i);
+    println!();
+
+    let mut z = z;
+    let mut iter = 0;
+
+    // For domain coloring, we just evaluate the function once
+    println!("  Iteration {}: z = ({:.6}, {:.6}), |z| = {:.6}", 
+             iter + 1, z.re, z.im, z.norm());
+
+    // Use the formula specified in params with custom imaginary unit
+    z = match MathEvaluator::evaluate_formula_with_param_and_custom_i(formula, z, z, custom_i) {  // Using z as both z and param for domain coloring
+        Ok(result) => result,
+        Err(_) => z, // Fallback to identity function
+    };
+
+    println!("  Result: z = ({:.6}, {:.6}), |z| = {:.6}, arg = {:.6}", 
+             z.re, z.im, z.norm(), z.arg());
+    
+    println!();
+}
