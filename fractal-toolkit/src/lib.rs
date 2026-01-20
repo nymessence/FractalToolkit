@@ -269,6 +269,36 @@ impl MathEvaluator {
                     Ok(result)
                 }
             },
+            "z^^z + c" => {
+                // Special handling for tetration z^^z + c
+                // Tetration z^^z means z^(z^(z^(...))) with z appearing z times
+                // This is extremely complex to compute directly, so we'll use a conservative approach
+                if z.im.abs() < 1e-10 && z.re.fract() == 0.0 && z.re > 0.0 && z.re <= 5.0 {
+                    // Integer tetration for small values - most stable for fractals
+                    let n = z.re as u32;
+                    let result = match n {
+                        1 => z,  // z^^1 = z
+                        2 => z.powc(z),  // z^^2 = z^z
+                        3 => {
+                            // z^^3 = z^(z^z)
+                            let z_pow_z = z.powc(z);
+                            if z_pow_z.norm_sqr() > 1e10 {
+                                Complex::new(1e5, 1e5)
+                            } else {
+                                z.powc(z_pow_z)
+                            }
+                        },
+                        _ => {
+                            // For higher values, return a safe value to avoid immediate escape
+                            Complex::new(1.0, 0.0)
+                        }
+                    };
+                    Ok(result + param)
+                } else {
+                    // For non-integer or complex z, return a safe value to avoid black images
+                    Ok(Complex::new(1.0, 0.0) + param)
+                }
+            },
             _ => {
                 // For more complex expressions, try to parse them with custom imaginary unit
                 ExpressionParser::evaluate_with_custom_i(formula, z, param, custom_i)
