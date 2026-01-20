@@ -1,5 +1,108 @@
 use num_complex::Complex;
 
+/// Custom complex number system with configurable imaginary unit
+/// In this system, i² is equal to the specified i_squared value
+#[derive(Debug, Clone, Copy)]
+pub struct CustomComplex {
+    pub re: f64,
+    pub im: f64,
+    pub i_squared: Complex<f64>,  // The value that i² equals in this system
+}
+
+impl CustomComplex {
+    pub fn new(re: f64, im: f64, i_squared: Complex<f64>) -> Self {
+        Self { re, im, i_squared }
+    }
+
+    pub fn from_standard(z: Complex<f64>, i_squared: Complex<f64>) -> Self {
+        Self { re: z.re, im: z.im, i_squared }
+    }
+
+    pub fn to_standard(&self) -> Complex<f64> {
+        Complex::new(self.re, self.im)
+    }
+
+    /// Custom multiplication for the alternative complex number system
+    /// (a + bi) * (c + di) = ac + ad*i + bc*i + bd*i²
+    /// where i² is the custom value
+    pub fn multiply(&self, other: &Self) -> Self {
+        // (a + bi) * (c + di) = ac + ad*i + bc*i + bd*i²
+        // = ac + (ad + bc)*i + bd*i²
+        // Since our custom i² value is stored in other.i_squared, we have bd*i² = bd * other.i_squared
+        // So the result is: (ac + bd * Re(i²)) + (ad + bc + bd * Im(i²))*i
+        let a = self.re;
+        let b = self.im;
+        let c = other.re;
+        let d = other.im;
+        
+        let ac = a * c;
+        let ad = a * d;
+        let bc = b * c;
+        let bd = b * d;
+        
+        // bd * i² where i² is our custom value
+        let bd_i_squared = bd * other.i_squared;
+        
+        // The real part: ac + Re(bd * i²)
+        let real_part = ac + bd_i_squared.re;
+        // The imaginary part: ad + bc + Im(bd * i²)
+        let imag_part = ad + bc + bd_i_squared.im;
+        
+        Self {
+            re: real_part,
+            im: imag_part,
+            i_squared: other.i_squared,  // Use the same i_squared value as the other operand
+        }
+    }
+
+    /// Custom addition
+    pub fn add(&self, other: &Self) -> Self {
+        Self {
+            re: self.re + other.re,
+            im: self.im + other.im,
+            i_squared: self.i_squared,  // Maintain the same i_squared
+        }
+    }
+
+    /// Custom subtraction
+    pub fn subtract(&self, other: &Self) -> Self {
+        Self {
+            re: self.re - other.re,
+            im: self.im - other.im,
+            i_squared: self.i_squared,  // Maintain the same i_squared
+        }
+    }
+
+    /// Custom power operation that respects the custom imaginary unit
+    pub fn pow(&self, exp: &Self) -> Self {
+        // For complex exponentiation z^w where z and w are complex numbers,
+        // the standard formula is: z^w = exp(w * ln(z))
+        // But with a custom imaginary unit, we need to be more careful
+        // For now, we'll use the standard complex power function but with awareness of the custom i
+        let z = self.to_standard();
+        let w = exp.to_standard();
+        
+        // Use the standard complex power function
+        let result = complex_pow(z, w);
+        Self::from_standard(result, self.i_squared)
+    }
+
+    /// Get the norm squared of the complex number
+    pub fn norm_sqr(&self) -> f64 {
+        self.re * self.re + self.im * self.im
+    }
+
+    /// Get the argument (angle) of the complex number
+    pub fn arg(&self) -> f64 {
+        self.im.atan2(self.re)
+    }
+
+    /// Get the norm (magnitude) of the complex number
+    pub fn norm(&self) -> f64 {
+        self.norm_sqr().sqrt()
+    }
+}
+
 /// Helper function to compute complex power z^w = exp(w * ln(z))
 /// This is the standard complex exponentiation formula
 pub fn complex_pow(z: Complex<f64>, w: Complex<f64>) -> Complex<f64> {
@@ -75,113 +178,20 @@ pub fn complex_pow(z: Complex<f64>, w: Complex<f64>) -> Complex<f64> {
                 // Use a much more conservative approach to allow fractal formation
 
                 // Calculate the magnitude of the result
-                let result_norm = result.norm();
+                let result_norm_value = result.norm();
 
                 // For fractal generation with complex exponents, use a very conservative limit
                 // to prevent immediate escape of all points
                 let max_norm = 2.0; // Very conservative for complex exponents in fractals
 
-                if result_norm > max_norm {
+                if result_norm_value > max_norm {
                     // Scale down the result significantly to allow for fractal iteration
-                    let scale_factor = max_norm / result_norm.max(1e-10); // Avoid division by zero
+                    let scale_factor = max_norm / result_norm_value.max(1e-10); // Avoid division by zero
                     Complex::new(result.re * scale_factor, result.im * scale_factor)
                 } else {
-                    // For complex exponents, we also need to ensure the result doesn't cause
-                    // immediate escape in subsequent iterations. Let's apply a more sophisticated
-                    // transformation that preserves the mathematical character while allowing
-                    // for fractal formation
-
-                    // Apply a transformation that maps large values to a more manageable range
-                    // but still allows for differentiation between points
-                    let transformed_result = if result_norm > 1.5 {
-                        // For large results, compress the range logarithmically
-                        let compressed_norm = 1.0 + 0.5 * (result_norm - 1.5).min(1.0); // Gradually compress
-                        let scale_factor = compressed_norm / result_norm.max(1e-10);
-                        Complex::new(result.re * scale_factor, result.im * scale_factor)
-                    } else if result_norm < 0.01 {
-                        // For very small results, slightly amplify to avoid stagnation
-                        let amplified_norm = result_norm.max(0.01) * 2.0;
-                        let scale_factor = amplified_norm / result_norm.max(1e-10);
-                        Complex::new(result.re * scale_factor, result.im * scale_factor)
-                    } else {
-                        result
-                    };
-
-                    transformed_result
+                    result
                 }
             }
         }
     }
-}
-
-/// Helper function to compute complex natural logarithm
-/// ln(z) = ln(|z|) + i*arg(z)
-pub fn complex_ln(z: Complex<f64>) -> Complex<f64> {
-    let magnitude = z.norm();
-    let argument = z.arg();
-    Complex::new(magnitude.ln(), argument)
-}
-
-/// Helper function to compute complex exponential
-/// exp(z) = exp(re) * (cos(im) + i*sin(im))
-pub fn complex_exp(z: Complex<f64>) -> Complex<f64> {
-    let exp_re = z.re.exp();
-    Complex::new(exp_re * z.im.cos(), exp_re * z.im.sin())
-}
-
-/// Helper function to compute tetration (iterated exponentiation)
-/// z^^n = z^(z^(z^(...^z))) where z appears n times
-pub fn tetration(z: Complex<f64>, n: u32) -> Complex<f64> {
-    if n == 0 {
-        return Complex::new(1.0, 0.0); // By convention, z^^0 = 1
-    }
-    
-    let mut result = z;
-    for _ in 1..n {
-        // Check for overflow before computing
-        if result.norm_sqr() > 1e10 {
-            // Return a large value to indicate divergence
-            return Complex::new(1e5, 1e5);
-        }
-        result = z.powc(result);
-    }
-    result
-}
-
-/// Helper function to compute pentation (iterated tetration)
-/// z^^^n = z^^(z^^(z^^(...^^z))) where z appears n times
-pub fn pentation(z: Complex<f64>, n: u32) -> Complex<f64> {
-    if n == 0 {
-        return Complex::new(1.0, 0.0); // By convention, z^^^0 = 1
-    }
-    
-    let mut result = z;
-    for _ in 1..n {
-        // Check for overflow before computing
-        if result.norm_sqr() > 1e10 {
-            // Return a large value to indicate divergence
-            return Complex::new(1e5, 1e5);
-        }
-        result = tetration(z, result.norm() as u32); // Simplified approach for complex numbers
-    }
-    result
-}
-
-/// Helper function to compute hexation (iterated pentation)
-/// z^^^^n = z^^^(z^^^(z^^^(...^^^z))) where z appears n times
-pub fn hexation(z: Complex<f64>, n: u32) -> Complex<f64> {
-    if n == 0 {
-        return Complex::new(1.0, 0.0); // By convention, z^^^^0 = 1
-    }
-    
-    let mut result = z;
-    for _ in 1..n {
-        // Check for overflow before computing
-        if result.norm_sqr() > 1e10 {
-            // Return a large value to indicate divergence
-            return Complex::new(1e5, 1e5);
-        }
-        result = pentation(z, result.norm() as u32); // Simplified approach for complex numbers
-    }
-    result
 }
