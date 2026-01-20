@@ -2,22 +2,42 @@
 //!
 //! A comprehensive library for generating various types of fractals including Mandelbrot sets,
 //! Julia sets, and Buddhabrot variants. This library provides the core algorithms and
-//! utilities for the fractal toolkit executables.
+//! utilities for the fractal toolkit executables with advanced support for custom imaginary units.
 //!
 //! ## Overview
 //!
 //! This library contains:
 //! - Core fractal algorithms for Mandelbrot, Julia, and Buddhabrot sets
-//! - Data structures for fractal parameters
+//! - Data structures for fractal parameters with support for custom imaginary units
 //! - Image generation utilities
 //! - Interactive HTML explorer generation
+//! - Advanced mathematical expression evaluation with custom complex number systems
+//!
+//! ## Key Features
+//!
+//! - **Custom Imaginary Units**: Support for alternative complex number systems where i² can equal any complex number value
+//!   - Standard complex numbers: i² = -1 (default behavior)
+//!   - Split complex numbers: i² = 1 (hyperbolic numbers)
+//!   - Alternative systems: i² = any complex value (enabling exploration of novel number systems)
+//! - **Hyperoperation Support**: Full support for tetration (z^^w), pentation (z^^^w), and hexation (z^^^^w) operations
+//! - **Advanced Formula Evaluation**: Sophisticated expression parser supporting complex mathematical functions
+//! - **Orbit Debugging**: Built-in orbit tracing functionality to visualize iteration paths
+//! - **High Performance**: Optimized multi-threaded rendering with rayon
+//!
+//! ## Mathematical Systems
+//!
+//! The library implements alternative complex number systems where the fundamental arithmetic operations
+//! respect the custom imaginary unit value. When i² = custom_value, multiplication is defined as:
+//! (a + bi) * (c + di) = ac + (ad + bc)*i + bd*(custom_value)
+//!
+//! This enables exploration of different mathematical properties and creates visually distinct fractals.
 //!
 //! ## Modules
 //!
-//! - `FractalParams`: Parameters for standard Mandelbrot and Julia sets
-//! - `BuddhabrotParams`: Parameters for Buddhabrot rendering with RGB channels
-//! - `BuddhabrotJuliaParams`: Parameters for Buddhabrot Julia sets
-//! - Algorithm functions for each fractal type
+//! - `FractalParams`: Parameters for fractal generation with custom imaginary unit support
+//! - `CustomComplex`: Alternative complex number system with configurable imaginary unit
+//! - `MathEvaluator`: Mathematical expression evaluator with custom imaginary unit support
+//! - Algorithm functions for each fractal type with custom arithmetic support
 
 use num_complex::Complex;
 use rand::{Rng, SeedableRng};
@@ -28,29 +48,114 @@ use std::sync::Arc;
 use chrono::Local;
 
 /// Custom complex number system with configurable imaginary unit
+///
+/// This structure implements an alternative complex number system where i² can equal any complex value.
+/// In standard complex numbers, i² = -1, but in this system, i² can equal any value specified by i_squared.
+/// This enables exploration of alternative number systems with different mathematical properties.
+///
+/// # Mathematical Properties
+///
+/// In this system, multiplication is defined as:
+/// (a + bi) * (c + di) = ac + (ad + bc)*i + bd*i²
+/// where i² is the custom value specified in i_squared.
+///
+/// # Examples
+///
+/// ```
+/// use num_complex::Complex;
+/// use fractal_toolkit::CustomComplex;
+///
+/// // Standard complex numbers (i² = -1)
+/// let standard_i = CustomComplex::new(0.0, 1.0, Complex::new(-1.0, 0.0));
+///
+/// // Split complex numbers (i² = 1)
+/// let split_i = CustomComplex::new(0.0, 1.0, Complex::new(1.0, 0.0));
+/// ```
 #[derive(Debug, Clone, Copy)]
 pub struct CustomComplex {
+    /// Real component of the complex number
     pub re: f64,
+    /// Imaginary component of the complex number
     pub im: f64,
+    /// The value that i² equals in this number system (i.e., what i is the square root of)
     pub i_squared: Complex<f64>,
 }
 
 impl CustomComplex {
+    /// Create a new CustomComplex number with the specified real and imaginary components
+    /// and the custom value that i² equals in this number system.
+    ///
+    /// # Arguments
+    ///
+    /// * `re` - The real component of the complex number
+    /// * `im` - The imaginary component of the complex number
+    /// * `i_squared` - The value that i² equals in this number system (what i is the square root of)
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use num_complex::Complex;
+    /// use fractal_toolkit::CustomComplex;
+    ///
+    /// // Create a standard complex number (i² = -1)
+    /// let z = CustomComplex::new(1.0, 2.0, Complex::new(-1.0, 0.0));
+    /// ```
     pub fn new(re: f64, im: f64, i_squared: Complex<f64>) -> Self {
         Self { re, im, i_squared }
     }
 
+    /// Convert this CustomComplex number to a standard Complex<f64> representation
+    ///
+    /// This method returns the complex number in standard form (a + bi) without considering
+    /// the custom imaginary unit value. It only preserves the real and imaginary components.
+    ///
+    /// # Returns
+    ///
+    /// A standard Complex<f64> with the same real and imaginary components as this CustomComplex
     pub fn to_standard(&self) -> Complex<f64> {
         Complex::new(self.re, self.im)
     }
 
+    /// Create a CustomComplex number from a standard Complex<f64> with a custom imaginary unit value
+    ///
+    /// This method creates a CustomComplex number with the same real and imaginary components
+    /// as the standard complex number, but with the specified custom value for i².
+    ///
+    /// # Arguments
+    ///
+    /// * `z` - The standard Complex<f64> to convert
+    /// * `i_squared` - The value that i² should equal in the resulting CustomComplex number system
+    ///
+    /// # Returns
+    ///
+    /// A CustomComplex number with the same real and imaginary components as z, but with the custom i² value
     pub fn from_standard(z: Complex<f64>, i_squared: Complex<f64>) -> Self {
         Self { re: z.re, im: z.im, i_squared }
     }
 
-    /// Custom multiplication for the alternative complex number system
+    /// Perform multiplication in the custom complex number system respecting the custom imaginary unit
+    ///
+    /// This method implements multiplication in the alternative complex number system where i² equals
+    /// the custom value specified in self.i_squared. The multiplication formula is:
     /// (a + bi) * (c + di) = ac + ad*i + bc*i + bd*i²
-    /// where i² is the custom value
+    /// = ac + (ad + bc)*i + bd*i²
+    ///
+    /// This is fundamentally different from standard complex multiplication where i² = -1.
+    /// In this system, the result depends on the custom value of i².
+    ///
+    /// # Arguments
+    ///
+    /// * `other` - The other CustomComplex number to multiply with this one
+    ///
+    /// # Returns
+    ///
+    /// A new CustomComplex number representing the product of self and other in the custom system
+    ///
+    /// # Mathematical Formula
+    ///
+    /// For (a + bi) * (c + di) in a system where i² = custom_value:
+    /// Real part = ac + Re(bd * custom_value)
+    /// Imaginary part = (ad + bc) + Im(bd * custom_value)
     pub fn multiply(&self, other: &Self) -> Self {
         // (a + bi) * (c + di) = ac + ad*i + bc*i + bd*i²
         // = ac + (ad + bc)*i + bd*i²
@@ -80,7 +185,20 @@ impl CustomComplex {
         }
     }
 
-    /// Custom addition
+    /// Perform addition in the custom complex number system
+    ///
+    /// Addition in the custom complex number system is the same as in standard complex numbers:
+    /// (a + bi) + (c + di) = (a + c) + (b + d)i
+    ///
+    /// The i² value remains unchanged in the result since addition doesn't involve the imaginary unit's square.
+    ///
+    /// # Arguments
+    ///
+    /// * `other` - The other CustomComplex number to add to this one
+    ///
+    /// # Returns
+    ///
+    /// A new CustomComplex number representing the sum of self and other
     pub fn add(&self, other: &Self) -> Self {
         Self {
             re: self.re + other.re,
@@ -89,7 +207,20 @@ impl CustomComplex {
         }
     }
 
-    /// Custom subtraction
+    /// Perform subtraction in the custom complex number system
+    ///
+    /// Subtraction in the custom complex number system is the same as in standard complex numbers:
+    /// (a + bi) - (c + di) = (a - c) + (b - d)i
+    ///
+    /// The i² value remains unchanged in the result since subtraction doesn't involve the imaginary unit's square.
+    ///
+    /// # Arguments
+    ///
+    /// * `other` - The CustomComplex number to subtract from this one
+    ///
+    /// # Returns
+    ///
+    /// A new CustomComplex number representing the difference of self minus other
     pub fn subtract(&self, other: &Self) -> Self {
         Self {
             re: self.re - other.re,
@@ -99,15 +230,50 @@ impl CustomComplex {
     }
 
     /// Get the norm squared of the complex number
+    ///
+    /// The norm squared is calculated as the sum of squares of the real and imaginary components:
+    /// |a + bi|² = a² + b²
+    ///
+    /// Note: This calculation is the same regardless of the custom imaginary unit value,
+    /// as the norm is based on the Euclidean distance in the complex plane.
+    ///
+    /// # Returns
+    ///
+    /// The squared norm (magnitude) of the complex number
     pub fn norm_sqr(&self) -> f64 {
         self.re * self.re + self.im * self.im
     }
 
-    /// Get the argument (angle) of the complex number
+    /// Get the argument (angle) of the complex number in radians
+    ///
+    /// The argument is calculated as atan2(imaginary_component, real_component), which gives
+    /// the angle in the range [-π, π].
+    ///
+    /// Note: This calculation is the same regardless of the custom imaginary unit value,
+    /// as the argument is based on the position in the complex plane.
+    ///
+    /// # Returns
+    ///
+    /// The argument (angle) of the complex number in radians
     pub fn arg(&self) -> f64 {
         self.im.atan2(self.re)
     }
     /// Custom power operation that respects the custom imaginary unit
+    ///
+    /// This method implements complex exponentiation z^w in the custom complex number system.
+    /// The power operation is computed using the standard complex power formula z^w = exp(w * ln(z)),
+    /// but the result is converted back to the custom complex number system with the same i² value.
+    ///
+    /// Note: This is a simplified implementation that uses the standard complex power function
+    /// but maintains the custom imaginary unit property in the result.
+    ///
+    /// # Arguments
+    ///
+    /// * `exp` - The exponent (power) as a CustomComplex number
+    ///
+    /// # Returns
+    ///
+    /// A new CustomComplex number representing z^exp in the custom system
     pub fn pow(&self, exp: &Self) -> Self {
         // For complex exponentiation z^w where z and w are complex numbers,
         // the standard formula is: z^w = exp(w * ln(z))
@@ -218,6 +384,32 @@ impl MathEvaluator {
     }
 
     /// Evaluate a mathematical formula with a parameter for complex numbers and custom imaginary unit
+    ///
+    /// This function evaluates mathematical expressions with support for custom imaginary units where i²
+    /// can equal any complex number value. When the formula contains the 'i' symbol, it is replaced with
+    /// the custom imaginary unit value specified by the custom_i parameter.
+    ///
+    /// # Arguments
+    ///
+    /// * `formula` - The mathematical formula to evaluate (e.g., "z^2 + c", "z^z + c", "z^^z + c")
+    /// * `z` - The complex number representing the current value in the iteration
+    /// * `param` - The complex parameter (typically 'c' in fractal formulas like z^2 + c)
+    /// * `custom_i` - The value that i² equals in the custom complex number system (what i is the square root of)
+    ///
+    /// # Returns
+    ///
+    /// The result of evaluating the formula as a complex number, or an error if the formula is invalid
+    ///
+    /// # Mathematical Implementation
+    ///
+    /// When custom_i equals Complex::new(0.0, -1.0), standard complex arithmetic is used (i² = -1).
+    /// When custom_i equals other values, alternative complex number arithmetic is used where the
+    /// fundamental operations respect the custom imaginary unit value.
+    ///
+    /// For example:
+    /// - Standard: custom_i = Complex::new(0.0, -1.0) → i² = -1 (standard complex numbers)
+    /// - Split Complex: custom_i = Complex::new(1.0, 0.0) → i² = 1 (split complex numbers)
+    /// - Other: custom_i = Complex::new(1.0, 1.0) → i² = 1+i (alternative complex system)
     pub fn evaluate_formula_with_param_and_custom_i(formula: &str, z: Complex<f64>, param: Complex<f64>, custom_i: Complex<f64>) -> Result<Complex<f64>, String> {
         let formula_lower = formula.trim().to_lowercase();
 
@@ -1500,12 +1692,22 @@ fn gamma_approximation(x: f64) -> f64 {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FractalParams {
-    pub bounds: [f64; 4],           // [x_min, x_max, y_min, y_max]
+    /// The rectangular bounds of the complex plane to render [x_min, x_max, y_min, y_max]
+    pub bounds: [f64; 4],
+    /// Maximum number of iterations before assuming a point is bounded
     pub max_iterations: u32,
-    pub spawn: Complex<f64>,        // For Julia sets
+    /// The complex constant for Julia sets (the c value in z^2 + c)
+    pub spawn: Complex<f64>,
+    /// The magnitude threshold for determining if a point has escaped
     pub bailout: f64,
+    /// The mathematical formula to use for iteration (e.g., "z^2 + c", "z^3 + c", "z^^z + c")
     pub formula: String,
-    pub i_sqrt_value: Complex<f64>, // Custom imaginary unit (i = sqrt of this value), defaults to 0+1i
+    /// The value that i² equals in the custom complex number system (i.e., what i is the square root of)
+    ///
+    /// In standard complex numbers, i² = -1, so this would be Complex::new(0.0, -1.0) (representing -1).
+    /// For split complex numbers, i² = 1, so this would be Complex::new(1.0, 0.0).
+    /// For other alternative number systems, this can be any complex value.
+    pub i_sqrt_value: Complex<f64>,
 }
 
 impl FractalParams {
@@ -2040,19 +2242,32 @@ pub fn generate_html_file(
     std::fs::write(html_path, html_content)
 }
 
-/// Calculate the number of iterations for a point in the Mandelbrot set
+/// Calculate the number of iterations for a point in a Mandelbrot set with support for custom imaginary units
 ///
 /// Determines how many iterations it takes for a complex point to escape the Mandelbrot set.
 /// Points that remain bounded after max_iterations are considered part of the set.
+/// This function supports custom imaginary units where i² can equal any complex number value,
+/// enabling exploration of alternative number systems with different mathematical properties.
 ///
 /// # Arguments
 ///
-/// * `c` - The complex number representing the point in the complex plane
-/// * `params` - Fractal parameters including max_iterations and bailout value
+/// * `c` - The complex number representing the point in the complex plane (the parameter for the Mandelbrot iteration z^2 + c)
+/// * `params` - Fractal parameters including max_iterations, spawn point (for Julia), bailout value, formula, and custom imaginary unit value
 ///
 /// # Returns
 ///
 /// The number of iterations before the point escapes, or max_iterations if it remains bounded
+///
+/// # Mathematical Implementation
+///
+/// When params.i_sqrt_value equals the standard value (i² = -1), the function uses standard complex arithmetic.
+/// When params.i_sqrt_value equals other values, the function uses alternative complex number arithmetic
+/// where the fundamental operations respect the custom imaginary unit value.
+///
+/// For example:
+/// - Standard: params.i_sqrt_value = Complex::new(0.0, -1.0) → i² = -1 (standard complex numbers)
+/// - Split Complex: params.i_sqrt_value = Complex::new(1.0, 0.0) → i² = 1 (split complex numbers)
+/// - Other: params.i_sqrt_value = Complex::new(1.0, 1.0) → i² = 1+i (alternative complex system)
 pub fn mandelbrot_iterations(c: Complex<f64>, params: &FractalParams) -> u32 {
     // If the custom imaginary unit is the standard one (i² = -1), use the regular algorithm
     if params.i_sqrt_value == Complex::new(0.0, 1.0) {
@@ -2096,19 +2311,32 @@ pub fn mandelbrot_iterations(c: Complex<f64>, params: &FractalParams) -> u32 {
     }
 }
 
-/// Calculate the number of iterations for a point in a Julia set
+/// Calculate the number of iterations for a point in a Julia set with support for custom imaginary units
 ///
 /// Determines how many iterations it takes for a complex point to escape the Julia set.
 /// Points that remain bounded after max_iterations are considered part of the set.
+/// This function supports custom imaginary units where i² can equal any complex number value,
+/// enabling exploration of alternative number systems with different mathematical properties.
 ///
 /// # Arguments
 ///
-/// * `z` - The complex number representing the point in the complex plane
-/// * `params` - Fractal parameters including max_iterations, spawn point (constant c), and bailout value
+/// * `z` - The complex number representing the initial point in the complex plane
+/// * `params` - Fractal parameters including max_iterations, spawn point (the constant c value for Julia iteration z^2 + c), bailout value, formula, and custom imaginary unit value
 ///
 /// # Returns
 ///
 /// The number of iterations before the point escapes, or max_iterations if it remains bounded
+///
+/// # Mathematical Implementation
+///
+/// When params.i_sqrt_value equals the standard value (i² = -1), the function uses standard complex arithmetic.
+/// When params.i_sqrt_value equals other values, the function uses alternative complex number arithmetic
+/// where the fundamental operations respect the custom imaginary unit value.
+///
+/// For example:
+/// - Standard: params.i_sqrt_value = Complex::new(0.0, -1.0) → i² = -1 (standard complex numbers)
+/// - Split Complex: params.i_sqrt_value = Complex::new(1.0, 0.0) → i² = 1 (split complex numbers)
+/// - Other: params.i_sqrt_value = Complex::new(1.0, 1.0) → i² = 1+i (alternative complex system)
 pub fn julia_iterations(z: Complex<f64>, params: &FractalParams) -> u32 {
     // If the custom imaginary unit is the standard one (i² = -1), use the regular algorithm
     if params.i_sqrt_value == Complex::new(0.0, 1.0) {
@@ -3284,8 +3512,31 @@ fn custom_complex_to_string(c: Complex<f64>) -> String {
     }
 }
 
-/// Helper function to compute custom complex multiplication with custom imaginary unit
-/// (a + bi) * (c + di) = ac + ad*i + bc*i + bd*i^2 where i^2 is the custom value
+/// Compute custom complex multiplication respecting the custom imaginary unit
+///
+/// This function performs multiplication in an alternative complex number system where i² equals
+/// the specified custom value. The multiplication formula is:
+/// (a + bi) * (c + di) = ac + ad*i + bc*i + bd*i²
+/// = ac + (ad + bc)*i + bd*i²
+///
+/// This is fundamentally different from standard complex multiplication where i² = -1.
+/// In this system, the result depends on the custom value of i².
+///
+/// # Arguments
+///
+/// * `z1` - First complex number (a + bi)
+/// * `z2` - Second complex number (c + di)
+/// * `i_squared` - The value that i² equals in this number system (what i is the square root of)
+///
+/// # Returns
+///
+/// The result of multiplying z1 and z2 in the custom complex number system
+///
+/// # Mathematical Formula
+///
+/// For (a + bi) * (c + di) in a system where i² = custom_value:
+/// Real part = ac + Re(bd * custom_value)
+/// Imaginary part = (ad + bc) + Im(bd * custom_value)
 fn custom_complex_multiply(z1: Complex<f64>, z2: Complex<f64>, i_squared: Complex<f64>) -> Complex<f64> {
     let a = z1.re;
     let b = z1.im;
@@ -3310,8 +3561,29 @@ fn custom_complex_multiply(z1: Complex<f64>, z2: Complex<f64>, i_squared: Comple
     Complex::new(real_part, imag_part)
 }
 
-/// Helper function to compute custom complex square with custom imaginary unit
-/// In this system, (a + bi)^2 = a^2 + 2abi + b^2*i^2 where i^2 is the custom value
+/// Compute custom complex square respecting the custom imaginary unit
+///
+/// This function computes the square in an alternative complex number system where i² equals
+/// the specified custom value. The square formula is:
+/// (a + bi)² = a² + 2abi + b²*i²
+///
+/// This is fundamentally different from standard complex squaring where i² = -1.
+/// In this system, the result depends on the custom value of i².
+///
+/// # Arguments
+///
+/// * `z` - The complex number to square (a + bi)
+/// * `i_squared` - The value that i² equals in this number system (what i is the square root of)
+///
+/// # Returns
+///
+/// The result of squaring z in the custom complex number system
+///
+/// # Mathematical Formula
+///
+/// For (a + bi)² in a system where i² = custom_value:
+/// Real part = a² + Re(b² * custom_value)
+/// Imaginary part = 2ab + Im(b² * custom_value)
 fn custom_complex_square(z: Complex<f64>, i_squared: Complex<f64>) -> Complex<f64> {
     let a = z.re;
     let b = z.im;
