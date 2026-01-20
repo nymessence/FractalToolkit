@@ -29,7 +29,6 @@ impl CustomComplex {
         // (a + bi) * (c + di) = ac + ad*i + bc*i + bd*i²
         // = ac + (ad + bc)*i + bd*i²
         // Since our custom i² value is stored in other.i_squared, we have bd*i² = bd * other.i_squared
-        // So the result is: (ac + bd * Re(i²)) + (ad + bc + bd * Im(i²))*i
         let a = self.re;
         let b = self.im;
         let c = other.re;
@@ -73,6 +72,22 @@ impl CustomComplex {
         }
     }
 
+    /// Custom division
+    pub fn divide(&self, other: &Self) -> Result<Self, String> {
+        // For division (a + bi)/(c + di), we need to multiply numerator and denominator by the conjugate
+        // But the conjugate in our system is more complex since i² is not necessarily -1
+        // For now, we'll convert to standard complex numbers, perform division, then convert back
+        let self_std = self.to_standard();
+        let other_std = other.to_standard();
+        
+        if other_std.norm_sqr() < 1e-10 {
+            return Err("Division by zero".to_string());
+        }
+        
+        let result_std = self_std / other_std;
+        Ok(Self::from_standard(result_std, self.i_squared))
+    }
+
     /// Custom power operation that respects the custom imaginary unit
     pub fn pow(&self, exp: &Self) -> Self {
         // For complex exponentiation z^w where z and w are complex numbers,
@@ -100,6 +115,20 @@ impl CustomComplex {
     /// Get the norm (magnitude) of the complex number
     pub fn norm(&self) -> f64 {
         self.norm_sqr().sqrt()
+    }
+
+    /// Get the square root of the complex number
+    pub fn sqrt(&self) -> Self {
+        let z = self.to_standard();
+        let result = z.sqrt();
+        Self::from_standard(result, self.i_squared)
+    }
+
+    /// Get the cube root of the complex number
+    pub fn cbrt(&self) -> Self {
+        let z = self.to_standard();
+        let result = z.powf(1.0/3.0);
+        Self::from_standard(result, self.i_squared)
     }
 }
 
@@ -192,6 +221,46 @@ pub fn complex_pow(z: Complex<f64>, w: Complex<f64>) -> Complex<f64> {
                     result
                 }
             }
+        }
+    }
+}
+
+/// Helper function to compute complex natural logarithm
+/// ln(z) = ln(|z|) + i*arg(z)
+pub fn complex_ln(z: Complex<f64>) -> Complex<f64> {
+    let magnitude = z.norm();
+    let argument = z.arg();
+    Complex::new(magnitude.ln(), argument)
+}
+
+/// Helper function to compute complex exponential
+/// exp(z) = exp(re) * (cos(im) + i*sin(im))
+pub fn complex_exp(z: Complex<f64>) -> Complex<f64> {
+    let exp_re = z.re.exp();
+    Complex::new(exp_re * z.im.cos(), exp_re * z.im.sin())
+}
+
+/// Helper function to convert Complex<f64> to string representation for custom i
+pub fn custom_complex_to_string(c: Complex<f64>) -> String {
+    if c.im == 0.0 {
+        format!("{}", c.re)
+    } else if c.re == 0.0 {
+        if c.im == 1.0 {
+            "i".to_string()
+        } else if c.im == -1.0 {
+            "-i".to_string()
+        } else {
+            format!("{}i", c.im)
+        }
+    } else {
+        if c.im == 1.0 {
+            format!("{}+i", c.re)
+        } else if c.im == -1.0 {
+            format!("{}-i", c.re)
+        } else if c.im > 0.0 {
+            format!("{}+{}i", c.re, c.im)
+        } else {
+            format!("{}{}i", c.re, c.im)  // Note: c.im already has the sign
         }
     }
 }
