@@ -27,30 +27,30 @@ impl CustomComplex {
     pub fn multiply(&self, other: &Self) -> Self {
         // (a + bi) * (c + di) = ac + ad*i + bc*i + bd*i²
         // = ac + (ad + bc)*i + bd*i²
-        // Since our custom i² value is stored in other.i_squared, we have bd*i² = bd * other.i_squared
-        // So the result is: (ac + bd * Re(i²)) + (ad + bc + bd * Im(i²))*i
+        // Since our custom i² value is stored in self.i_squared (both operands should have same i_squared),
+        // we have bd*i² = bd * self.i_squared (or other.i_squared - they should be the same)
         let a = self.re;
         let b = self.im;
         let c = other.re;
         let d = other.im;
-        
+
         let ac = a * c;
         let ad = a * d;
         let bc = b * c;
         let bd = b * d;
-        
+
         // bd * i² where i² is our custom value
-        let bd_i_squared = bd * other.i_squared;
-        
+        let bd_i_squared = bd * self.i_squared;
+
         // The real part: ac + Re(bd * i²)
         let real_part = ac + bd_i_squared.re;
         // The imaginary part: ad + bc + Im(bd * i²)
         let imag_part = ad + bc + bd_i_squared.im;
-        
+
         Self {
             re: real_part,
             im: imag_part,
-            i_squared: other.i_squared,  // Use the same i_squared value as the other operand
+            i_squared: self.i_squared,  // Use the same i_squared value as this operand
         }
     }
 

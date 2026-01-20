@@ -2030,8 +2030,8 @@ pub fn mandelbrot_iterations(c: Complex<f64>, params: &FractalParams) -> u32 {
     } else {
         // Use the custom complex number system for non-standard imaginary units
         let custom_i_squared = params.i_sqrt_value;  // This is the value that i² equals
-        let mut z = CustomComplex::new(0.0, 0.0, custom_i_squared);
-        let c_custom = CustomComplex::new(c.re, c.im, custom_i_squared);
+        let mut z = CustomComplex::from_standard(Complex::new(0.0, 0.0), custom_i_squared);
+        let c_custom = CustomComplex::from_standard(c, custom_i_squared);
         let mut iter = 0;
 
         while iter < params.max_iterations {
@@ -3024,4 +3024,46 @@ where
     );
 
     imgbuf
+}
+/// Trace the orbit of a point in the Mandelbrot set for debugging purposes
+pub fn trace_orbit_mandelbrot(c: Complex<f64>, params: &FractalParams) {
+    println!("Tracing orbit for Mandelbrot with:");
+    println!("  Point c: {:?}", c);
+    println!("  Formula: {}", params.formula);
+    println!("  Custom i² value: {:?}", params.i_sqrt_value);
+    println!("  Max iterations: {}", params.max_iterations);
+    println!("  Bailout: {}", params.bailout);
+    println!();
+
+    let mut z = Complex::new(0.0, 0.0);
+    let mut iter = 0;
+
+    while iter < params.max_iterations {
+        println!("  Iteration {}: z = ({:.6}, {:.6}), |z| = {:.6}", 
+                 iter + 1, z.re, z.im, z.norm());
+
+        // Use the formula specified in params, defaulting to z^2 + c if evaluation fails
+        z = match MathEvaluator::evaluate_formula_with_param_and_custom_i(&params.formula, z, c, params.i_sqrt_value) {
+            Ok(result) => {
+                // If we get here, the formula evaluation succeeded
+                result
+            },
+            Err(_e) => {
+                z * z + c // Fallback to standard formula
+            },
+        };
+
+        if z.norm_sqr() > params.bailout * params.bailout {
+            println!("  Point escapes at iteration {}", iter + 1);
+            break;
+        }
+        
+        iter += 1;
+    }
+    
+    if iter >= params.max_iterations {
+        println!("  Point remains bounded after {} iterations", params.max_iterations);
+    }
+    
+    println!();
 }
