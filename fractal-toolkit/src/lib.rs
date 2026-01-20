@@ -54,15 +54,59 @@ impl CustomComplex {
     pub fn multiply(&self, other: &Self) -> Self {
         // (a + bi) * (c + di) = ac + ad*i + bc*i + bd*i²
         // = ac + (ad + bc)*i + bd*i²
-        // But since our result is still in the form (x + yi), we need to express this differently
-        // Actually, in our system, we're still using standard complex representation but with
-        // a custom interpretation of how i² behaves in operations.
-        // For now, let's just use standard complex multiplication since the custom i value
-        // affects how complex powers are calculated, not multiplication itself.
-        let standard_result = self.to_standard() * other.to_standard();
-        Self::from_standard(standard_result, self.i_squared)
+        // Since our custom i² value is stored in other.i_squared, we have bd*i² = bd * other.i_squared
+        let a = self.re;
+        let b = self.im;
+        let c = other.re;
+        let d = other.im;
+
+        let ac = a * c;
+        let ad = a * d;
+        let bc = b * c;
+        let bd = b * d;
+
+        // bd * i² where i² is our custom value
+        let bd_i_squared = bd * other.i_squared;
+
+        // The real part: ac + Re(bd * i²)
+        let real_part = ac + bd_i_squared.re;
+        // The imaginary part: ad + bc + Im(bd * i²)
+        let imag_part = ad + bc + bd_i_squared.im;
+
+        Self {
+            re: real_part,
+            im: imag_part,
+            i_squared: other.i_squared,  // Use the same i_squared value as the other operand
+        }
     }
 
+    /// Custom addition
+    pub fn add(&self, other: &Self) -> Self {
+        Self {
+            re: self.re + other.re,
+            im: self.im + other.im,
+            i_squared: self.i_squared,  // Maintain the same i_squared
+        }
+    }
+
+    /// Custom subtraction
+    pub fn subtract(&self, other: &Self) -> Self {
+        Self {
+            re: self.re - other.re,
+            im: self.im - other.im,
+            i_squared: self.i_squared,  // Maintain the same i_squared
+        }
+    }
+
+    /// Get the norm squared of the complex number
+    pub fn norm_sqr(&self) -> f64 {
+        self.re * self.re + self.im * self.im
+    }
+
+    /// Get the argument (angle) of the complex number
+    pub fn arg(&self) -> f64 {
+        self.im.atan2(self.re)
+    }
     /// Custom power operation that respects the custom imaginary unit
     pub fn pow(&self, exp: &Self) -> Self {
         // For complex exponentiation z^w where z and w are complex numbers,
@@ -174,7 +218,7 @@ impl MathEvaluator {
     }
 
     /// Evaluate a mathematical formula with a parameter for complex numbers and custom imaginary unit
-    pub fn evaluate_formula_with_param_and_custom_i(formula: &str, z: Complex<f64>, param: Complex<f64>, _custom_i: Complex<f64>) -> Result<Complex<f64>, String> {
+    pub fn evaluate_formula_with_param_and_custom_i(formula: &str, z: Complex<f64>, param: Complex<f64>, custom_i: Complex<f64>) -> Result<Complex<f64>, String> {
         let formula_lower = formula.trim().to_lowercase();
 
         match formula_lower.as_str() {
@@ -209,7 +253,7 @@ impl MathEvaluator {
             "z^2 + c*log(z)" => Ok(z * z + param * z.ln()),
             _ => {
                 // For more complex expressions, try to parse them with custom imaginary unit
-                ExpressionParser::evaluate_with_custom_i(formula, z, param, _custom_i)
+                ExpressionParser::evaluate_with_custom_i(formula, z, param, custom_i)
             }
         }
     }
@@ -1946,30 +1990,46 @@ pub fn generate_html_file(
 ///
 /// The number of iterations before the point escapes, or max_iterations if it remains bounded
 pub fn mandelbrot_iterations(c: Complex<f64>, params: &FractalParams) -> u32 {
-    let mut z = Complex::new(0.0, 0.0);
-    let mut iter = 0;
+    // If the custom imaginary unit is the standard one (i² = -1), use the regular algorithm
+    if params.i_sqrt_value == Complex::new(0.0, 1.0) {
+        // Use the standard algorithm for backward compatibility
+        let mut z = Complex::new(0.0, 0.0);
+        let mut iter = 0;
 
-    while iter < params.max_iterations {
+        while iter < params.max_iterations {
+            // Use the formula specified in params, defaulting to z^2 + c if evaluation fails
+            z = match MathEvaluator::evaluate_formula_with_param(&params.formula, z, c) {
+                Ok(result) => result,
+                Err(_e) => z * z + c, // Fallback to standard formula
+            };
 
-        // Use the formula specified in params, defaulting to z^2 + c if evaluation fails
-        z = match MathEvaluator::evaluate_formula_with_param_and_custom_i(&params.formula, z, c, params.i_sqrt_value) {
-            Ok(result) => {
-                // If we get here, the formula evaluation succeeded
-                result
-            },
-            Err(_e) => {
-                z * z + c // Fallback to standard formula
-            },
-        };
-
-
-        if z.norm_sqr() > params.bailout * params.bailout {
-            break;
+            if z.norm_sqr() > params.bailout * params.bailout {
+                break;
+            }
+            iter += 1;
         }
-        iter += 1;
-    }
 
-    iter
+        iter
+    } else {
+        // Use the custom complex number system for non-standard imaginary units
+        let custom_i_squared = params.i_sqrt_value;  // This is the value that i² equals
+        let mut z = CustomComplex::new(0.0, 0.0, custom_i_squared);
+        let c_custom = CustomComplex::new(c.re, c.im, custom_i_squared);
+        let mut iter = 0;
+
+        while iter < params.max_iterations {
+            // Use custom complex arithmetic: z = z^2 + c
+            let z_squared = z.multiply(&z);
+            z = z_squared.add(&c_custom);
+
+            if z.norm_sqr() > params.bailout * params.bailout {
+                break;
+            }
+            iter += 1;
+        }
+
+        iter
+    }
 }
 
 /// Calculate the number of iterations for a point in a Julia set
@@ -1986,25 +2046,47 @@ pub fn mandelbrot_iterations(c: Complex<f64>, params: &FractalParams) -> u32 {
 ///
 /// The number of iterations before the point escapes, or max_iterations if it remains bounded
 pub fn julia_iterations(z: Complex<f64>, params: &FractalParams) -> u32 {
-    let c = params.spawn;  // Use spawn point as the constant for Julia set
-    let mut z = z;
-    let mut iter = 0;
+    // If the custom imaginary unit is the standard one (i² = -1), use the regular algorithm
+    if params.i_sqrt_value == Complex::new(0.0, 1.0) {
+        // Use the standard algorithm for backward compatibility
+        let c = params.spawn;  // Use spawn point as the constant for Julia set
+        let mut z = z;
+        let mut iter = 0;
 
-    while iter < params.max_iterations {
-        // Use the formula specified in params, defaulting to z^2 + c if evaluation fails
-        z = match MathEvaluator::evaluate_formula_with_param_and_custom_i(&params.formula, z, c, params.i_sqrt_value) {
-            Ok(result) => result,
-            Err(_) => z * z + c, // Fallback to standard formula
-        };
+        while iter < params.max_iterations {
+            // Use the formula specified in params, defaulting to z^2 + c if evaluation fails
+            z = match MathEvaluator::evaluate_formula_with_param(&params.formula, z, c) {
+                Ok(result) => result,
+                Err(_) => z * z + c, // Fallback to standard formula
+            };
 
-
-        if z.norm_sqr() > params.bailout * params.bailout {
-            break;
+            if z.norm_sqr() > params.bailout * params.bailout {
+                break;
+            }
+            iter += 1;
         }
-        iter += 1;
-    }
 
-    iter
+        iter
+    } else {
+        // Use the custom complex number system for non-standard imaginary units
+        let custom_i_squared = params.i_sqrt_value;  // This is the value that i² equals
+        let mut z = CustomComplex::new(z.re, z.im, custom_i_squared);
+        let c = CustomComplex::new(params.spawn.re, params.spawn.im, custom_i_squared);
+        let mut iter = 0;
+
+        while iter < params.max_iterations {
+            // Use custom complex arithmetic: z = z^2 + c
+            let z_squared = z.multiply(&z);
+            z = z_squared.add(&c);
+
+            if z.norm_sqr() > params.bailout * params.bailout {
+                break;
+            }
+            iter += 1;
+        }
+
+        iter
+    }
 }
 
 /// Calculate the Buddhabrot for a specific channel
@@ -2069,9 +2151,28 @@ pub fn buddhabrot_channel(
                 while iter < channel_params.max_iter {
                     orbit.push(z);
                     // Use the formula specified in params, defaulting to z^2 + c if evaluation fails
-                    z = match MathEvaluator::evaluate_formula_with_param_and_custom_i(&params.formula, z, c, params.i_sqrt_value) {
-                        Ok(result) => result,
-                        Err(_) => z * z + c, // Fallback to standard formula
+                    if params.i_sqrt_value == Complex::new(0.0, 1.0) {
+                        // Use standard algorithm for backward compatibility
+                        z = match MathEvaluator::evaluate_formula_with_param(&params.formula, z, c) {
+                            Ok(result) => result,
+                            Err(_) => z * z + c, // Fallback to standard formula
+                        };
+                    } else {
+                        // Use custom complex arithmetic for non-standard imaginary units
+                        let custom_i_squared = params.i_sqrt_value;
+                        let z_custom = CustomComplex::new(z.re, z.im, custom_i_squared);
+                        let c_custom = CustomComplex::new(c.re, c.im, custom_i_squared);
+
+                        let result_custom = match MathEvaluator::evaluate_formula_with_param(&params.formula, z_custom.to_standard(), c_custom.to_standard()) {
+                            Ok(result) => CustomComplex::from_standard(result, custom_i_squared),
+                            Err(_) => {
+                                // Fallback to standard formula using custom arithmetic
+                                let z_sq = z_custom.multiply(&z_custom);
+                                z_sq.add(&c_custom)
+                            },
+                        };
+
+                        z = result_custom.to_standard();
                     };
 
                     if z.norm_sqr() > params.bailout * params.bailout {
@@ -2271,9 +2372,28 @@ pub fn buddhabrot_julia_channel(
                 while iter < channel_params.max_iter {
                     orbit.push(z);
                     // Use the formula specified in params, defaulting to z^2 + c if evaluation fails
-                    z = match MathEvaluator::evaluate_formula_with_param_and_custom_i(&params.formula, z, params.spawn, params.i_sqrt_value) {
-                        Ok(result) => result,
-                        Err(_) => z * z + params.spawn, // Fallback to standard Julia formula
+                    if params.i_sqrt_value == Complex::new(0.0, 1.0) {
+                        // Use standard algorithm for backward compatibility
+                        z = match MathEvaluator::evaluate_formula_with_param(&params.formula, z, params.spawn) {
+                            Ok(result) => result,
+                            Err(_) => z * z + params.spawn, // Fallback to standard Julia formula
+                        };
+                    } else {
+                        // Use custom complex arithmetic for non-standard imaginary units
+                        let custom_i_squared = params.i_sqrt_value;
+                        let z_custom = CustomComplex::new(z.re, z.im, custom_i_squared);
+                        let c_custom = CustomComplex::new(params.spawn.re, params.spawn.im, custom_i_squared);
+
+                        let result_custom = match MathEvaluator::evaluate_formula_with_param(&params.formula, z_custom.to_standard(), c_custom.to_standard()) {
+                            Ok(result) => CustomComplex::from_standard(result, custom_i_squared),
+                            Err(_) => {
+                                // Fallback to standard formula using custom arithmetic
+                                let z_sq = z_custom.multiply(&z_custom);
+                                z_sq.add(&c_custom)
+                            },
+                        };
+
+                        z = result_custom.to_standard();
                     };
 
                     if z.norm_sqr() > params.bailout * params.bailout {
@@ -2528,7 +2648,26 @@ fn evaluate_complex_function_with_custom_i(formula: &str, z: Complex<f64>, custo
     let param = z; // For Mandelbrot, param is the coordinate; for Julia, it would be fixed
 
     // Use the existing expression parser with custom imaginary unit
-    MathEvaluator::evaluate_formula_with_param_and_custom_i(formula, z, param, custom_i)
+    if custom_i == Complex::new(0.0, 1.0) {
+        // Use standard algorithm for backward compatibility
+        MathEvaluator::evaluate_formula_with_param(formula, z, param)
+    } else {
+        // Use custom complex arithmetic for non-standard imaginary units
+        let custom_i_squared = custom_i; // This is the value that i² equals
+        let z_custom = CustomComplex::new(z.re, z.im, custom_i_squared);
+        let param_custom = CustomComplex::new(param.re, param.im, custom_i_squared);
+
+        let result_custom = match MathEvaluator::evaluate_formula_with_param(formula, z_custom.to_standard(), param_custom.to_standard()) {
+            Ok(result) => CustomComplex::from_standard(result, custom_i_squared),
+            Err(_) => {
+                // Fallback to standard formula using custom arithmetic
+                let z_sq = z_custom.multiply(&z_custom);
+                z_sq.add(&param_custom)
+            },
+        };
+
+        Ok(result_custom.to_standard())
+    }
 }
 
 /// Convert HSV color values to RGB

@@ -1,7 +1,6 @@
 use num_complex::Complex;
 
-/// Custom complex number system with configurable imaginary unit
-/// In this system, i² is equal to the specified i_squared value
+/// Custom complex number system where i² equals a custom value
 #[derive(Debug, Clone, Copy)]
 pub struct CustomComplex {
     pub re: f64,
@@ -29,6 +28,7 @@ impl CustomComplex {
         // (a + bi) * (c + di) = ac + ad*i + bc*i + bd*i²
         // = ac + (ad + bc)*i + bd*i²
         // Since our custom i² value is stored in other.i_squared, we have bd*i² = bd * other.i_squared
+        // So the result is: (ac + bd * Re(i²)) + (ad + bc + bd * Im(i²))*i
         let a = self.re;
         let b = self.im;
         let c = other.re;
@@ -72,22 +72,6 @@ impl CustomComplex {
         }
     }
 
-    /// Custom division
-    pub fn divide(&self, other: &Self) -> Result<Self, String> {
-        // For division (a + bi)/(c + di), we need to multiply numerator and denominator by the conjugate
-        // But the conjugate in our system is more complex since i² is not necessarily -1
-        // For now, we'll convert to standard complex numbers, perform division, then convert back
-        let self_std = self.to_standard();
-        let other_std = other.to_standard();
-        
-        if other_std.norm_sqr() < 1e-10 {
-            return Err("Division by zero".to_string());
-        }
-        
-        let result_std = self_std / other_std;
-        Ok(Self::from_standard(result_std, self.i_squared))
-    }
-
     /// Custom power operation that respects the custom imaginary unit
     pub fn pow(&self, exp: &Self) -> Self {
         // For complex exponentiation z^w where z and w are complex numbers,
@@ -116,25 +100,11 @@ impl CustomComplex {
     pub fn norm(&self) -> f64 {
         self.norm_sqr().sqrt()
     }
-
-    /// Get the square root of the complex number
-    pub fn sqrt(&self) -> Self {
-        let z = self.to_standard();
-        let result = z.sqrt();
-        Self::from_standard(result, self.i_squared)
-    }
-
-    /// Get the cube root of the complex number
-    pub fn cbrt(&self) -> Self {
-        let z = self.to_standard();
-        let result = z.powf(1.0/3.0);
-        Self::from_standard(result, self.i_squared)
-    }
 }
 
 /// Helper function to compute complex power z^w = exp(w * ln(z))
 /// This is the standard complex exponentiation formula
-pub fn complex_pow(z: Complex<f64>, w: Complex<f64>) -> Complex<f64> {
+fn complex_pow(z: Complex<f64>, w: Complex<f64>) -> Complex<f64> {
     // Handle special cases
     if z.norm_sqr() < 1e-10 {
         // For very small z values (near zero), handle specially
@@ -225,42 +195,66 @@ pub fn complex_pow(z: Complex<f64>, w: Complex<f64>) -> Complex<f64> {
     }
 }
 
-/// Helper function to compute complex natural logarithm
-/// ln(z) = ln(|z|) + i*arg(z)
-pub fn complex_ln(z: Complex<f64>) -> Complex<f64> {
-    let magnitude = z.norm();
-    let argument = z.arg();
-    Complex::new(magnitude.ln(), argument)
-}
+/// Debugging function to trace orbit behavior with custom imaginary unit
+pub fn debug_orbit_iteration(z_init: Complex<f64>, c: Complex<f64>, custom_i_squared: Complex<f64>, max_iter: u32, formula: &str) {
+    println!("Debugging orbit for formula: {}", formula);
+    println!("Initial z: {:?}", z_init);
+    println!("Parameter c: {:?}", c);
+    println!("Custom i² value: {:?}", custom_i_squared);
+    println!();
 
-/// Helper function to compute complex exponential
-/// exp(z) = exp(re) * (cos(im) + i*sin(im))
-pub fn complex_exp(z: Complex<f64>) -> Complex<f64> {
-    let exp_re = z.re.exp();
-    Complex::new(exp_re * z.im.cos(), exp_re * z.im.sin())
-}
+    let custom_i = CustomComplex::from_standard(z_init, custom_i_squared);
+    let c_custom = CustomComplex::from_standard(c, custom_i_squared);
+    let mut z = custom_i;
 
-/// Helper function to convert Complex<f64> to string representation for custom i
-pub fn custom_complex_to_string(c: Complex<f64>) -> String {
-    if c.im == 0.0 {
-        format!("{}", c.re)
-    } else if c.re == 0.0 {
-        if c.im == 1.0 {
-            "i".to_string()
-        } else if c.im == -1.0 {
-            "-i".to_string()
-        } else {
-            format!("{}i", c.im)
+    for iter in 0..max_iter {
+        // For z^2 + c with custom arithmetic
+        let z_squared = z.multiply(&z);
+        z = z_squared.add(&c_custom);
+        
+        let z_standard = z.to_standard();
+        println!("Iteration {}: z = {:?}, |z| = {:.6}", iter + 1, z_standard, z_standard.norm());
+        
+        if z.norm_sqr() > 16.0 {  // Standard bailout
+            println!("Point escapes at iteration {}", iter + 1);
+            break;
         }
-    } else {
-        if c.im == 1.0 {
-            format!("{}+i", c.re)
-        } else if c.im == -1.0 {
-            format!("{}-i", c.re)
-        } else if c.im > 0.0 {
-            format!("{}+{}i", c.re, c.im)
-        } else {
-            format!("{}{}i", c.re, c.im)  // Note: c.im already has the sign
+        
+        if iter >= max_iter - 1 {
+            println!("Point remains bounded after {} iterations", max_iter);
         }
     }
+    println!();
+}
+
+fn main() {
+    // Test with standard complex numbers (i² = -1)
+    println!("=== STANDARD COMPLEX (i² = -1) ===");
+    debug_orbit_iteration(
+        Complex::new(0.0, 0.0),  // Initial z
+        Complex::new(-0.7269, 0.1889),  // Point in interesting region
+        Complex::new(0.0, -1.0),  // Standard i² = -1
+        16,  // Max iterations
+        "z^2 + c"
+    );
+    
+    // Test with split complex numbers (i² = 1)
+    println!("=== SPLIT COMPLEX (i² = 1) ===");
+    debug_orbit_iteration(
+        Complex::new(0.0, 0.0),  // Initial z
+        Complex::new(-0.7269, 0.1889),  // Point in interesting region
+        Complex::new(1.0, 0.0),  // Split complex i² = 1
+        16,  // Max iterations
+        "z^2 + c"
+    );
+    
+    // Test with custom value (i² = -i)
+    println!("=== CUSTOM IMAGINARY UNIT (i² = -i) ===");
+    debug_orbit_iteration(
+        Complex::new(0.0, 0.0),  // Initial z
+        Complex::new(-0.7269, 0.1889),  // Point in interesting region
+        Complex::new(0.0, -1.0),  // Custom i² = -i
+        16,  // Max iterations
+        "z^2 + c"
+    );
 }
