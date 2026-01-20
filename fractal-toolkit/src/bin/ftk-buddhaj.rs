@@ -71,6 +71,10 @@ struct Args {
     /// Enable orbit debugging to trace the iteration path for a specific point
     #[arg(long)]
     orbit_debug: bool,
+
+    /// Point coordinates for orbit debugging [real, imag] (requires --orbit-debug)
+    #[arg(long, value_delimiter = ',', num_args = 1..=2, default_values_t = [0.0, 0.0])]
+    debug_point: Vec<f64>,
 }
 
 fn main() {
@@ -185,8 +189,14 @@ fn main() {
 
     // If orbit debugging is enabled, trace the orbit for a specific point
     if args.orbit_debug {
-        // Use a central point in the view for debugging
-        let debug_point = num_complex::Complex::new(0.0, 0.0);
+        // Validate debug point
+        if args.debug_point.len() != 2 {
+            eprintln!("Error: debug-point must have exactly 2 values [real, imag]");
+            std::process::exit(1);
+        }
+
+        // Use the specified debug point
+        let debug_point = num_complex::Complex::new(args.debug_point[0], args.debug_point[1]);
         println!("Orbit debug for point: {:?}", debug_point);
         fractal_toolkit::trace_orbit_buddhaj(debug_point, &params);
         return; // Exit after debugging

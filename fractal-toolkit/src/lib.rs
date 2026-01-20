@@ -320,10 +320,13 @@ impl ExpressionParser {
     }
 
     /// Evaluate a mathematical expression with complex numbers and custom imaginary unit
-    pub fn evaluate_with_custom_i(formula: &str, z: Complex<f64>, param: Complex<f64>, _custom_i: Complex<f64>) -> Result<Complex<f64>, String> {
-        // For now, just call the regular evaluate function
-        // In a full implementation, we would need to create a new parser that handles the custom i
-        Self::evaluate(formula, z, param)
+    pub fn evaluate_with_custom_i(formula: &str, z: Complex<f64>, param: Complex<f64>, custom_i: Complex<f64>) -> Result<Complex<f64>, String> {
+        // Preprocess the formula to replace 'i' with the custom imaginary unit value
+        // This allows users to use 'i' in their formulas and have it interpreted as the custom value
+        let processed_formula = formula.replace("i", &format!("({})", custom_complex_to_string(custom_i)));
+
+        // Then evaluate the processed formula
+        Self::evaluate(&processed_formula, z, param)
     }
 
     /// Tokenize the input string
@@ -3240,4 +3243,29 @@ pub fn trace_orbit_dca(z: Complex<f64>, formula: &str, custom_i: Complex<f64>) {
              z.re, z.im, z.norm(), z.arg());
     
     println!();
+}
+
+/// Helper function to convert Complex<f64> to string representation for custom i
+fn custom_complex_to_string(c: Complex<f64>) -> String {
+    if c.im == 0.0 {
+        format!("{}", c.re)
+    } else if c.re == 0.0 {
+        if c.im == 1.0 {
+            "i".to_string()
+        } else if c.im == -1.0 {
+            "-i".to_string()
+        } else {
+            format!("{}i", c.im)
+        }
+    } else {
+        if c.im == 1.0 {
+            format!("{}+i", c.re)
+        } else if c.im == -1.0 {
+            format!("{}-i", c.re)
+        } else if c.im > 0.0 {
+            format!("{}+{}i", c.re, c.im)
+        } else {
+            format!("{}{}i", c.re, c.im)  // Note: c.im already has the sign
+        }
+    }
 }
