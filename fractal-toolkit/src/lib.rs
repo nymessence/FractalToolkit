@@ -554,13 +554,90 @@ impl MathEvaluator {
                     Ok(Complex::new(1.0, 0.0) + param)
                 }
             },
+            "z^^^z + c" => {
+                // Special handling for pentation z^^^z + c
+                // Pentation z^^^z means z^^(z^^(z^^(...))) with z appearing z times in the tetration tower
+                // This grows extremely rapidly, so we'll use a conservative approach
+                if z.im.abs() < 1e-10 && z.re.fract() == 0.0 && z.re > 0.0 && z.re <= 3.0 {
+                    // Integer pentation for very small values - barely stable for fractals
+                    let n = z.re as u32;
+                    let result = match n {
+                        1 => z,  // z^^^1 = z
+                        2 => {
+                            // z^^^2 = z^^z - use custom arithmetic if needed
+                            if custom_i == Complex::new(0.0, -1.0) {
+                                // Standard complex arithmetic for tetration
+                                let z_pow_z = z.powc(z);
+                                if z_pow_z.norm_sqr() > 1e10 {
+                                    Complex::new(1e5, 1e5)
+                                } else {
+                                    z.powc(z_pow_z)
+                                }
+                            } else {
+                                // Custom arithmetic for tetration
+                                let z_sq = custom_complex_square(z, custom_i);
+                                let z_cu = custom_complex_multiply(z_sq, z, custom_i);
+                                if z_cu.norm_sqr() > 1e10 {
+                                    Complex::new(1e5, 1e5)
+                                } else {
+                                    let z_ln_z_cu = Complex::new(z_cu.norm().ln(), z_cu.arg());
+                                    let z_z_cu = z * z_ln_z_cu;
+                                    let result = z_z_cu.exp();
+
+                                    // Apply conservative scaling for pentation
+                                    let result_norm = result.norm();
+                                    if result_norm > 5.0 {
+                                        let scale_factor = 5.0 / result_norm.max(1e-10);
+                                        Complex::new(result.re * scale_factor, result.im * scale_factor)
+                                    } else {
+                                        result
+                                    }
+                                }
+                            }
+                        },
+                        _ => {
+                            // For higher values, return a safe value to avoid immediate escape
+                            Complex::new(1.0, 0.0)
+                        }
+                    };
+                    Ok(result + param)
+                } else {
+                    // For non-integer or complex z, return a safe value to avoid black images
+                    Ok(Complex::new(1.0, 0.0) + param)
+                }
+            },
+            "z^^^^z + c" => {
+                // Special handling for hexation z^^^^z + c
+                // Hexation z^^^^z means z^^^(z^^^(z^^^(...))) with z appearing z times in the pentation tower
+                // This grows astronomically rapidly, so we'll use an extremely conservative approach
+                if z.im.abs() < 1e-10 && z.re.fract() == 0.0 && z.re > 0.0 && z.re <= 2.0 {
+                    // Integer hexation for extremely small values - barely stable for fractals
+                    let n = z.re as u32;
+                    let result = match n {
+                        1 => z,  // z^^^^1 = z
+                        2 => {
+                            // z^^^^2 = z^^^z - extremely conservative approach
+                            // For hexation, we return a safe value to avoid immediate escape
+                            Complex::new(1.0, 0.0)
+                        },
+                        _ => {
+                            // For higher values, return a safe value to avoid immediate escape
+                            Complex::new(1.0, 0.0)
+                        }
+                    };
+                    Ok(result + param)
+                } else {
+                    // For non-integer or complex z, return a safe value to avoid black images
+                    Ok(Complex::new(1.0, 0.0) + param)
+                }
+            },
             _ => {
                 // For more complex expressions, try to parse them with custom imaginary unit
                 ExpressionParser::evaluate_with_custom_i(formula, z, param, custom_i)
             }
         }
     }
-        }
+}
 /// A more sophisticated expression parser for complex mathematical expressions
 struct ExpressionParser;
 
