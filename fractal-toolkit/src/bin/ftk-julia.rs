@@ -212,6 +212,7 @@ fn main() {
         // Use the specified debug point
         let debug_point = num_complex::Complex::new(args.debug_point[0], args.debug_point[1]);
         println!("Orbit debug for point: {:?}", debug_point);
+
         fractal_toolkit::trace_orbit_julia(debug_point, &params);
         return; // Exit after debugging
     }

@@ -233,6 +233,7 @@ fn main() {
         // Use the specified debug point
         let debug_point = num_complex::Complex::new(args.debug_point[0], args.debug_point[1]);
         println!("Orbit debug for point: {:?}", debug_point);
+
         fractal_toolkit::trace_orbit_mandelbrot(debug_point, &params);
         return; // Exit after debugging
     }
@@ -256,7 +257,7 @@ fn main() {
 
     // Generate the fractal image
     let img = if args.domain_color {
-        // Use domain coloring mode
+        // Use domain coloring mode with standard precision
         fractal_toolkit::generate_mandelbrot_domain_color_image(width, height, &params, args.no_bailout, color_palette.as_ref())
     } else {
         generate_mandelbrot_image(width, height, &params, color_palette.as_ref())
