@@ -565,7 +565,6 @@ impl MathEvaluator {
 struct ExpressionParser;
 
 impl ExpressionParser {
-    /// Evaluate a mathematical expression with complex numbers
     pub fn evaluate(formula: &str, z: Complex<f64>, param: Complex<f64>) -> Result<Complex<f64>, String> {
         let tokens = Self::tokenize(formula)?;
         let mut pos = 0;
