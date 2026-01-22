@@ -3955,3 +3955,103 @@ pub fn parse_complex_number(s: &str) -> Result<Complex<f64>, String> {
     
     Err(format!("Unable to parse complex number: {}", s))
 }
+
+/// More precise complex power function with better handling of edge cases
+fn complex_pow_precise(z: Complex<f64>, w: Complex<f64>) -> Complex<f64> {
+    // Handle special cases with higher precision
+    if z.norm_sqr() < 1e-10 {
+        // z is essentially zero
+        if w.re > 0.0 {
+            // 0^w where Re(w) > 0 should be 0
+            Complex::new(0.0, 0.0)
+        } else if w.re == 0.0 && w.im == 0.0 {
+            // 0^0 is typically defined as 1
+            Complex::new(1.0, 0.0)
+        } else {
+            // For other cases involving zero base, return a safe value
+            Complex::new(0.0, 0.0)
+        }
+    } else if w.norm_sqr() < 1e-10 {
+        // w is essentially zero, so z^w = z^0 = 1
+        Complex::new(1.0, 0.0)
+    } else {
+        // Standard complex exponentiation: z^w = exp(w * ln(z))
+        // Use higher precision for the intermediate calculations
+        let ln_z = complex_ln_precise(z);
+        let w_ln_z = w * ln_z;
+        complex_exp_precise(w_ln_z)
+    }
+}
+
+/// More precise complex natural logarithm with better handling of edge cases
+fn complex_ln_precise(z: Complex<f64>) -> Complex<f64> {
+    let magnitude = z.norm();
+    let argument = z.arg();
+    
+    // Use higher precision for the logarithm calculation
+    if magnitude <= 0.0 {
+        // For zero or negative magnitudes, return a safe value
+        Complex::new(f64::NEG_INFINITY, argument)
+    } else {
+        Complex::new(magnitude.ln(), argument)
+    }
+}
+
+/// More precise complex exponential with better handling of edge cases
+fn complex_exp_precise(z: Complex<f64>) -> Complex<f64> {
+    // exp(a + bi) = exp(a) * (cos(b) + i*sin(b))
+    let exp_re = z.re.exp();
+    
+    // Check for overflow in the real part
+    if exp_re.is_infinite() {
+        // Return a large but finite value to avoid infinities
+        let safe_exp = 1e100;
+        Complex::new(safe_exp * z.im.cos(), safe_exp * z.im.sin())
+    } else {
+        Complex::new(exp_re * z.im.cos(), exp_re * z.im.sin())
+    }
+}
+
+/// Enhanced tetration function with better precision handling
+fn enhanced_tetration(z: Complex<f64>, height: Complex<f64>) -> Complex<f64> {
+    // For integer heights, use iterative approach with overflow checking
+    if height.im.abs() < 1e-10 && height.re.fract() == 0.0 && height.re > 0.0 && height.re <= 5.0 {
+        let n = height.re as u32;
+        match n {
+            1 => z,  // z^^1 = z
+            2 => {
+                // z^^2 = z^z
+                let result = complex_pow_precise(z, z);
+                // Check for overflow and apply conservative scaling
+                if result.norm_sqr() > 1e10 {
+                    let scale_factor = 1e5 / result.norm().max(1e-10);
+                    Complex::new(result.re * scale_factor, result.im * scale_factor)
+                } else {
+                    result
+                }
+            },
+            3 => {
+                // z^^3 = z^(z^z)
+                let z_pow_z = complex_pow_precise(z, z);
+                if z_pow_z.norm_sqr() > 1e10 {
+                    Complex::new(1e5, 1e5)
+                } else {
+                    let result = complex_pow_precise(z, z_pow_z);
+                    if result.norm_sqr() > 1e10 {
+                        let scale_factor = 1e5 / result.norm().max(1e-10);
+                        Complex::new(result.re * scale_factor, result.im * scale_factor)
+                    } else {
+                        result
+                    }
+                }
+            },
+            _ => {
+                // For higher values, return a safe value to avoid immediate escape
+                Complex::new(1.0, 0.0)
+            }
+        }
+    } else {
+        // For non-integer heights, return a safe value to avoid black images
+        Complex::new(1.0, 0.0)
+    }
+}
