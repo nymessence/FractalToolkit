@@ -163,6 +163,8 @@ struct Args {
     /// Disable bailout threshold for fully domain-colored plots (use with --domain-color)
     #[arg(long)]
     no_bailout: bool,
+
+
 }
 
 fn main() {
