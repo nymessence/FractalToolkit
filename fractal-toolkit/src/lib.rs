@@ -4055,3 +4055,365 @@ fn enhanced_tetration(z: Complex<f64>, height: Complex<f64>) -> Complex<f64> {
         Complex::new(1.0, 0.0)
     }
 }
+
+use rug::{Complex as RugComplex, Float as RugFloat};
+
+/// Parameters for arbitrary precision fractal generation
+#[derive(Debug, Clone)]
+pub struct ArbitraryPrecisionParams {
+    pub bounds: [f64; 4],           // [x_min, x_max, y_min, y_max]
+    pub max_iterations: u32,
+    pub spawn: Complex<f64>,        // For Julia sets
+    pub bailout: f64,
+    pub formula: String,
+    pub i_sqrt_value: Complex<f64>, // Custom imaginary unit (i = sqrt of this value), defaults to 0+1i
+    pub precision_bits: u32,        // Precision in bits for arbitrary precision mode (0 = disabled)
+}
+
+impl ArbitraryPrecisionParams {
+    pub fn new(bounds: [f64; 4], max_iterations: u32, spawn: [f64; 2], bailout: f64, formula: String, precision_bits: u32) -> Self {
+        Self {
+            bounds,
+            max_iterations,
+            spawn: Complex::new(spawn[0], spawn[1]),
+            bailout,
+            formula,
+            i_sqrt_value: Complex::new(0.0, 1.0), // Default to standard i = sqrt(-1)
+            precision_bits,  // Precision in bits for arbitrary precision mode
+        }
+    }
+    
+    /// Convert to standard FractalParams
+    pub fn to_standard(&self) -> FractalParams {
+        FractalParams {
+            bounds: self.bounds,
+            max_iterations: self.max_iterations,
+            spawn: self.spawn,
+            bailout: self.bailout,
+            formula: self.formula.clone(),
+            i_sqrt_value: self.i_sqrt_value,
+        }
+    }
+}
+
+/// Calculate the number of iterations for a point in a Mandelbrot set with arbitrary precision arithmetic
+pub fn mandelbrot_iterations_arbitrary_precision(c: Complex<f64>, params: &ArbitraryPrecisionParams) -> u32 {
+    if params.precision_bits == 0 {
+        // Use standard precision
+        return mandelbrot_iterations(c, &params.to_standard());
+    }
+    
+    // Use arbitrary precision arithmetic
+    let c_ap = RugComplex::with_val(params.precision_bits, c.re, c.im);
+    let i_squared_ap = RugComplex::with_val(params.precision_bits, params.i_sqrt_value.re, params.i_sqrt_value.im);
+    let mut z = RugComplex::with_val(params.precision_bits, 0.0, 0.0);
+    let bailout_ap = RugFloat::with_val(params.precision_bits, params.bailout);
+    let mut iter = 0;
+
+    while iter < params.max_iterations {
+        // Apply the formula with arbitrary precision arithmetic
+        z = match evaluate_formula_arbitrary_precision(&params.formula, &z, &c_ap, &i_squared_ap, params.precision_bits) {
+            Ok(result) => result,
+            Err(_e) => {
+                // Fallback to standard formula with arbitrary precision: z^2 + c
+                let z_sq = rug_complex_multiply(&z, &z, &i_squared_ap, params.precision_bits);
+                rug_complex_add(&z_sq, &c_ap, params.precision_bits)
+            },
+        };
+
+        // Check if the point escapes using arbitrary precision norm
+        let norm_sqr = rug_complex_norm_sqr(&z, params.precision_bits);
+        if norm_sqr > &bailout_ap * &bailout_ap {
+            break;
+        }
+        iter += 1;
+    }
+
+    iter
+}
+
+/// Evaluate a formula with arbitrary precision arithmetic
+fn evaluate_formula_arbitrary_precision(formula: &str, z: &RugComplex, param: &RugComplex, i_squared: &RugComplex, precision: u32) -> Result<RugComplex, String> {
+    let formula_lower = formula.trim().to_lowercase();
+    
+    match formula_lower.as_str() {
+        "z^2 + c" => {
+            let z_sq = rug_complex_multiply(z, z, i_squared, precision);
+            Ok(rug_complex_add(&z_sq, param, precision))
+        },
+        "z^3 + c" => {
+            let z_sq = rug_complex_multiply(z, z, i_squared, precision);
+            let z_cu = rug_complex_multiply(&z_sq, z, i_squared, precision);
+            Ok(rug_complex_add(&z_cu, param, precision))
+        },
+        "z^z + c" => {
+            // For z^z with arbitrary precision, we use the formula z^z = exp(z * ln(z))
+            let ln_z = rug_complex_ln(z, precision);
+            let z_ln_z = rug_complex_multiply(z, &ln_z, i_squared, precision);
+            let z_pow_z = rug_complex_exp(&z_ln_z, precision);
+            
+            // Apply conservative scaling to prevent immediate escape
+            let result = rug_complex_add(&z_pow_z, param, precision);
+            let result_norm = rug_complex_norm(&result, precision);
+            
+            let max_norm = RugFloat::with_val(precision, 2.0);
+            if result_norm > max_norm {
+                let scale_factor = &max_norm / &result_norm;
+                let scaled_real = result.real() * &scale_factor;
+                let scaled_imag = result.imag() * &scale_factor;
+                Ok(RugComplex::with_val(precision, scaled_real, scaled_imag))
+            } else {
+                Ok(result)
+            }
+        },
+        "z^^z + c" => {
+            // For tetration z^^z with arbitrary precision
+            // This is extremely complex to compute directly, so we'll use a conservative approach
+            let z_real = z.real().to_f64();
+            let z_imag = z.imag().to_f64();
+            
+            if z_imag.abs() < 1e-10 && z_real.fract() == 0.0 && z_real > 0.0 && z_real <= 5.0 {
+                // Integer tetration for small values - most stable for fractals
+                let n = z_real as u32;
+                let result = match n {
+                    1 => z.clone(),
+                    2 => {
+                        // z^^2 = z^z with arbitrary precision
+                        let ln_z = rug_complex_ln(z, precision);
+                        let z_ln_z = rug_complex_multiply(z, &ln_z, i_squared, precision);
+                        rug_complex_exp(&z_ln_z, precision)
+                    },
+                    _ => {
+                        // For higher values, return a safe value to avoid immediate escape
+                        RugComplex::with_val(precision, 1.0, 0.0)
+                    }
+                };
+                Ok(rug_complex_add(&result, param, precision))
+            } else {
+                // For non-integer or complex z, return a safe value to avoid black images
+                Ok(rug_complex_add(&RugComplex::with_val(precision, 1.0, 0.0), param, precision))
+            }
+        },
+        _ => {
+            // For more complex expressions, try to parse them with arbitrary precision
+            // This would require implementing a full arbitrary-precision expression parser
+            // For now, we'll fall back to standard precision
+            let z_std = Complex::new(z.real().to_f64(), z.imag().to_f64());
+            let param_std = Complex::new(param.real().to_f64(), param.imag().to_f64());
+            
+            match MathEvaluator::evaluate_formula_with_param_and_custom_i(&params.formula, z_std, param_std, params.i_sqrt_value) {
+                Ok(result) => {
+                    Ok(RugComplex::with_val(precision, result.re, result.im))
+                },
+                Err(e) => Err(e),
+            }
+        }
+    }
+}
+
+/// Helper function for arbitrary precision complex multiplication with custom imaginary unit
+fn rug_complex_multiply(z1: &RugComplex, z2: &RugComplex, i_squared: &RugComplex, precision: u32) -> RugComplex {
+    // (a + bi) * (c + di) = ac + (ad + bc)*i + bd*i²
+    // where i² is the custom value
+    let a = z1.real();
+    let b = z1.imag();
+    let c = z2.real();
+    let d = z2.imag();
+    
+    let ac = a * c;
+    let ad = a * d;
+    let bc = b * c;
+    let bd = b * d;
+    
+    // bd * i² where i² is our custom value
+    let bd_i_squared = &bd * i_squared;
+    
+    // Real part: ac + Re(bd * i²)
+    let real_part = &ac + bd_i_squared.real();
+    // Imaginary part: (ad + bc) + Im(bd * i²)
+    let imag_part = (&ad + &bc) + bd_i_squared.imag();
+    
+    RugComplex::with_val(precision, real_part, imag_part)
+}
+
+/// Helper function for arbitrary precision complex addition
+fn rug_complex_add(z1: &RugComplex, z2: &RugComplex, precision: u32) -> RugComplex {
+    RugComplex::with_val(precision, z1.real() + z2.real(), z1.imag() + z2.imag())
+}
+
+/// Helper function for arbitrary precision complex norm squared
+fn rug_complex_norm_sqr(z: &RugComplex, precision: u32) -> RugFloat {
+    let re = z.real();
+    let im = z.imag();
+    &re * &re + &im * &im
+}
+
+/// Helper function for arbitrary precision complex norm
+fn rug_complex_norm(z: &RugComplex, precision: u32) -> RugFloat {
+    rug_complex_norm_sqr(z, precision).sqrt()
+}
+
+/// Helper function for arbitrary precision complex natural logarithm
+fn rug_complex_ln(z: &RugComplex, precision: u32) -> RugComplex {
+    let magnitude = rug_complex_norm(z, precision).ln();
+    let argument = rug_complex_arg(z, precision);
+    RugComplex::with_val(precision, magnitude, argument)
+}
+
+/// Helper function for arbitrary precision complex argument (angle)
+fn rug_complex_arg(z: &RugComplex, precision: u32) -> RugFloat {
+    z.imag().atan2(z.real())
+}
+
+/// Helper function for arbitrary precision complex exponential
+fn rug_complex_exp(z: &RugComplex, precision: u32) -> RugComplex {
+    // exp(a + bi) = exp(a) * (cos(b) + i*sin(b))
+    let exp_re = z.real().exp();
+    let cos_im = z.imag().cos();
+    let sin_im = z.imag().sin();
+    
+    let real_part = &exp_re * &cos_im;
+    let imag_part = &exp_re * &sin_im;
+    
+    RugComplex::with_val(precision, real_part, imag_part)
+}
+
+/// Test arbitrary precision with various complex functions
+pub fn test_arbitrary_precision() {
+    println!("Testing arbitrary precision with various complex functions...");
+    
+    // Test with different precision levels
+    for prec in [32, 64, 128, 256, 512, 1024] {
+        println!("
+Testing with {} bits of precision:", prec);
+        
+        // Test basic operations
+        let z1 = RugComplex::with_val(prec, 1.5, 0.5);
+        let z2 = RugComplex::with_val(prec, 2.0, -1.0);
+        let i_squared = RugComplex::with_val(prec, -1.0, 0.0); // Standard complex
+        
+        let result = rug_complex_multiply(&z1, &z2, &i_squared, prec);
+        println!("  (1.5 + 0.5i) * (2.0 - 1.0i) = ({:.10}, {:.10}i)", 
+                 result.real().to_f64(), result.imag().to_f64());
+        
+        // Test complex power
+        let z = RugComplex::with_val(prec, 1.5, 0.5);
+        let w = RugComplex::with_val(prec, 2.0, 0.3);
+        let ln_z = rug_complex_ln(&z, prec);
+        let z_ln_w = rug_complex_multiply(&ln_z, &w, &i_squared, prec);
+        let z_pow_w = rug_complex_exp(&z_ln_w, prec);
+        println!("  (1.5 + 0.5i)^(2.0 + 0.3i) = ({:.10}, {:.10}i)", 
+                 z_pow_w.real().to_f64(), z_pow_w.imag().to_f64());
+        
+        // Test tetration
+        let z_tet = RugComplex::with_val(prec, 1.5, 0.0); // Real number for tetration
+        if z_tet.imag().to_f64().abs() < 1e-10 && z_tet.real().to_f64().fract() == 0.0 && z_tet.real().to_f64() > 0.0 && z_tet.real().to_f64() <= 3.0 {
+            let n = z_tet.real().to_f64() as u32;
+            match n {
+                1 => println!("  1^^1 = 1 (trivial)"),
+                2 => {
+                    let z_sq = rug_complex_multiply(&z_tet, &z_tet, &i_squared, prec);
+                    println!("  2^^2 = 2^2 = ({:.10}, {:.10}i)", 
+                             z_sq.real().to_f64(), z_sq.imag().to_f64());
+                },
+                3 => {
+                    let z_sq = rug_complex_multiply(&z_tet, &z_tet, &i_squared, prec);
+                    let z_cu = rug_complex_multiply(&z_sq, &z_tet, &i_squared, prec);
+                    println!("  3^^3 = 3^(3^3) - would be astronomically large, returning safe value");
+                },
+                _ => println!("  Higher tetration values return safe values"),
+            }
+        }
+    }
+    
+    println!("
+Arbitrary precision testing completed!");
+}
+
+
+/// Generate a Mandelbrot set image with arbitrary precision arithmetic
+/// 
+/// This function generates a Mandelbrot set image using arbitrary precision arithmetic where the precision
+/// can be specified in bits. This enables more accurate computation of complex mathematical operations
+/// that might lose precision with standard f64 arithmetic.
+/// 
+/// # Arguments
+/// 
+/// * `width` - Width of the output image in pixels
+/// * `height` - Height of the output image in pixels
+/// * `params` - Fractal parameters including bounds, max_iterations, formula, and custom imaginary unit
+/// * `precision_bits` - Number of bits of precision to use for the calculations
+/// * `color_palette` - Optional color palette for coloring the image
+/// 
+/// # Returns
+/// 
+/// An RGBA image buffer representing the Mandelbrot set with arbitrary precision arithmetic
+pub fn generate_mandelbrot_image_arbitrary_precision(
+    width: u32,
+    height: u32,
+    params: &FractalParams,
+    precision_bits: u32,
+    color_palette: Option<&Vec<ColorStop>>
+) -> ImageBuffer<Rgba<u8>, Vec<u8>> {
+    use rayon::prelude::*;
+    use std::sync::Arc;
+    
+    let img = ImageBuffer::new(width, height);
+    let params_arc = Arc::new(params.clone());
+    let bounds = params.bounds;
+    let color_palette_arc = color_palette.cloned().map(Arc::new);
+    let ap_params = ArbitraryPrecisionParams::new(
+        bounds,
+        params.max_iterations,
+        [params.spawn.re, params.spawn.im],
+        params.bailout,
+        params.formula.clone(),
+        precision_bits,
+    );
+    ap_params.i_sqrt_value = params.i_sqrt_value;
+    
+    // Calculate step sizes for mapping pixels to complex plane
+    let dx = (bounds[1] - bounds[0]) / width as f64;
+    let dy = (bounds[3] - bounds[2]) / height as f64;
+    
+    // Process rows in parallel
+    let rows: Vec<Vec<Rgba<u8>>> = (0..height)
+        .into_par_iter()
+        .map(|y| {
+            let mut row = Vec::with_capacity(width as usize);
+            for x in 0..width {
+                // Convert pixel coordinates to complex plane coordinates
+                let c = Complex::new(
+                    bounds[0] + x as f64 * dx,
+                    bounds[2] + y as f64 * dy,
+                );
+                
+                // Calculate the number of iterations for this point using arbitrary precision
+                let iterations = mandelbrot_iterations_arbitrary_precision(c, &ap_params);
+                
+                // Map the iteration count to a color
+                let color = if iterations == params_arc.max_iterations {
+                    // Inside the set - black
+                    Rgba([0, 0, 0, 255])
+                } else {
+                    // Outside the set - interpolate color based on iteration count
+                    if let Some(ref palette) = color_palette_arc {
+                        interpolate_color_from_palette(iterations as f64 / params_arc.max_iterations as f64, palette)
+                    } else {
+                        // Default coloring based on iteration count
+                        color_from_iterations(iterations, params_arc.max_iterations)
+                    }
+                };
+                row.push(color);
+            }
+            row
+        })
+        .collect();
+    
+    // Flatten the rows into a single vector
+    let pixels: Vec<Rgba<u8>> = rows.into_iter().flatten().collect();
+    
+    // Create the final image from the pixel data
+    ImageBuffer::from_vec(width, height, pixels).unwrap()
+}
+

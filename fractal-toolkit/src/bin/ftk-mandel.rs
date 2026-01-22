@@ -164,7 +164,9 @@ struct Args {
     #[arg(long)]
     no_bailout: bool,
 
-
+    /// Maximum precision in bits for arbitrary precision arithmetic (0 = disabled, standard f64 used)
+    #[arg(long, default_value_t = 0)]
+    max_prec: u32,
 }
 
 fn main() {
@@ -258,7 +260,10 @@ fn main() {
     };
 
     // Generate the fractal image
-    let img = if args.domain_color {
+    let img = if args.max_prec > 0 {
+        // Use arbitrary precision mode
+        fractal_toolkit::generate_mandelbrot_image_arbitrary_precision(width, height, &params, args.max_prec, color_palette.as_ref())
+    } else if args.domain_color {
         // Use domain coloring mode with standard precision
         fractal_toolkit::generate_mandelbrot_domain_color_image(width, height, &params, args.no_bailout, color_palette.as_ref())
     } else {
