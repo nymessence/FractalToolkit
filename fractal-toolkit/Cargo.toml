@@ -35,4 +35,4 @@ special = "0.12"
 chrono = "0.4"
 rayon = "1.7"
 num_cpus = "1.16"
-rug = { version = "1.19", features = ["complex"] }
+
