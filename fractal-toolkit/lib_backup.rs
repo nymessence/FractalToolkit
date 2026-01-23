@@ -4446,7 +4446,7 @@ impl LargeNumber {
     }
     
     pub fn new_scientific(significand: f64, base: f64, exponent: LargeNumber) -> Self {
-        LargeNumber::new_scientific {
+        LargeNumber::Scientific {
             significand,
             base,
             exponent: Box::new(exponent),
@@ -4483,7 +4483,7 @@ impl LargeNumber {
     pub fn to_f64(&self) -> f64 {
         match self {
             LargeNumber::new_standard(val) => *val,
-            LargeNumber::new_scientific { significand, base, exponent } => {
+            LargeNumber::Scientific { significand, base, exponent } => {
                 let exp_val = exponent.to_f64();
                 if exp_val > 300.0 {
                     // Would overflow, return infinity
@@ -4505,8 +4505,8 @@ impl LargeNumber {
     pub fn abs(&self) -> Self {
         match self {
             LargeNumber::new_standard(val) => LargeNumber::new_standard(val.abs()),
-            LargeNumber::new_scientific { significand, base, exponent } => {
-                LargeNumber::new_scientific {
+            LargeNumber::Scientific { significand, base, exponent } => {
+                LargeNumber::Scientific {
                     significand: significand.abs(),
                     base: *base,
                     exponent: exponent.clone(),
@@ -4523,7 +4523,7 @@ impl LargeNumber {
     pub fn is_finite(&self) -> bool {
         match self {
             LargeNumber::new_standard(val) => val.is_finite(),
-            LargeNumber::new_scientific { .. } => true, // Scientific notation represents finite values
+            LargeNumber::Scientific { .. } => true, // Scientific notation represents finite values
             LargeNumber::Special(special) => match special {
                 SpecialValue::Infinity | SpecialValue::NegInfinity | SpecialValue::NaN => false,
                 SpecialValue::Zero => true,
@@ -4606,12 +4606,12 @@ impl LargeNumber {
                     LargeNumber::new_standard(result)
                 }
             },
-            (LargeNumber::new_scientific { significand: s1, base: b1, exponent: e1 }, 
-             LargeNumber::new_scientific { significand: s2, base: b2, exponent: e2 }) if (b1 - b2).abs() < 1e-10 => {
+            (LargeNumber::Scientific { significand: s1, base: b1, exponent: e1 }, 
+             LargeNumber::Scientific { significand: s2, base: b2, exponent: e2 }) if (b1 - b2).abs() < 1e-10 => {
                 // Same base: multiply significands and add exponents
                 let new_significand = s1 * s2;
                 let new_exponent = e1.add(e2);
-                LargeNumber::new_scientific {
+                LargeNumber::Scientific {
                     significand: new_significand,
                     base: *b1,
                     exponent: Box::new(new_exponent),
@@ -4673,17 +4673,17 @@ impl LargeNumber {
                     LargeNumber::nan()
                 }
             },
-            (LargeNumber::new_scientific { significand: s, base: b, exponent: e }, LargeNumber::new_standard(exp_val)) => {
+            (LargeNumber::Scientific { significand: s, base: b, exponent: e }, LargeNumber::new_standard(exp_val)) => {
                 // (s * b^e)^exp_val = s^exp_val * b^(e*exp_val)
                 let new_significand = s.powf(*exp_val);
                 let new_exponent = e.multiply(&LargeNumber::new_standard(*exp_val));
-                LargeNumber::new_scientific {
+                LargeNumber::Scientific {
                     significand: new_significand,
                     base: *b,
                     exponent: Box::new(new_exponent),
                 }
             },
-            (LargeNumber::new_standard(base_val), LargeNumber::new_scientific { significand: s, base: b, exponent: e }) => {
+            (LargeNumber::new_standard(base_val), LargeNumber::Scientific { significand: s, base: b, exponent: e }) => {
                 // base_val^(s * b^e) - this is complex, convert to f64 if reasonable
                 if *base_val > 0.0 base_val > 0.0 && s.abs() < 100.0 && b.abs() < 100.0 && e.is_finite()base_val > 0.0 && s.abs() < 100.0 && b.abs() < 100.0 && e.is_finite() s.abs() < 100.0 base_val > 0.0 && s.abs() < 100.0 && b.abs() < 100.0 && e.is_finite()base_val > 0.0 && s.abs() < 100.0 && b.abs() < 100.0 && e.is_finite() b.abs() < 100.0 base_val > 0.0 && s.abs() < 100.0 && b.abs() < 100.0 && e.is_finite()base_val > 0.0 && s.abs() < 100.0 && b.abs() < 100.0 && e.is_finite() e.is_finite() {
                     let exp_as_f64 = e.to_f64();
@@ -4761,449 +4761,7 @@ impl LargeNumber {
     pub fn norm(&self) -> f64 {
         match self {
             LargeNumber::new_standard(val) => val.abs(),
-            LargeNumber::new_scientific { significand, base, exponent } => {
-                let exp_val = exponent.to_f64();
-                if exp_val > 300.0 {
-                    f64::INFINITY
-                } else {
-                    significand.abs() * base.powf(exp_val)
-                }
-            },
-            LargeNumber::Special(special) => match special {
-                SpecialValue::Infinity | SpecialValue::NegInfinity => f64::INFINITY,
-                SpecialValue::NaN => f64::NAN,
-                SpecialValue::Zero => 0.0,
-            },
-        }
-    }
-}
-
-/// Efficient complex number representation for very large values
-#[derive(Debug, Clone, PartialEq)]
-pub struct LargeComplex {
-    pub real: LargeNumber,
-    pub imag: LargeNumber,
-}
-
-impl LargeComplex {
-    pub fn new(real: LargeNumber, imag: LargeNumber) -> Self {
-        LargeComplex { real, imag }
-    }
-    
-    pub fn from_standard(z: Complex<f64>) -> Self {
-        LargeComplex {
-            real: LargeNumber::new_standard(z.re),
-            imag: LargeNumber::new_standard(z.im),
-        }
-    }
-    
-    pub fn to_standard(&self) -> Complex<f64> {
-        Complex::new(self.real.to_f64(), self.imag.to_f64())
-    }
-    
-    /// Custom multiplication for the alternative complex number system with large numbers
-    /// (a + bi) * (c + di) = ac + (ad + bc)*i + bd*i²
-    /// where i² is the custom value
-    pub fn multiply(&self, other: &Self, i_squared: &LargeComplex) -> Self {
-        let a = &self.real;
-        let b = &self.imag;
-        let c = &other.real;
-        let d = &other.imag;
-        
-        let ac = a.multiply(c);
-        let ad = a.multiply(&other.imag);
-        let bc = b.multiply(c);
-        let bd = b.multiply(d);
-        
-        // bd * i² where i² is our custom value
-        let bd_i_squared = bd.multiply(&i_squared);
-        
-        // Real part: ac + Re(bd * i²)
-        let real_part = ac.add(&bd_i_squared.real);
-        // Imaginary part: (ad + bc) + Im(bd * i²)
-        let imag_part = ad.add(bc).add(&bd_i_squared.imag);
-        
-        LargeComplex::new(real_part, imag_part)
-    }
-    
-    /// Addition of large complex numbers
-    pub fn add(&self, other: &Self) -> Self {
-        LargeComplex::new(
-            self.real.add(&other.real),
-            self.imag.add(&other.imag),
-        )
-    }
-    
-    /// Get the norm squared of the complex number
-    pub fn norm_sqr(&self) -> LargeNumber {
-        let real_sqr = self.real.pow(&LargeNumber::new_standard(2.0));
-        let imag_sqr = self.imag.pow(&LargeNumber::new_standard(2.0));
-        real_sqr.add(&imag_sqr)
-    }
-    
-    /// Get the norm (magnitude) of the complex number
-    pub fn norm(&self) -> f64 {
-        let norm_sqr = self.norm_sqr();
-        norm_sqr.to_f64().sqrt()
-    }
-    
-    /// Convert to RugComplex for high precision operations when needed
-    pub fn to_rug_complex(&self, precision: u32) -> RugComplex {
-        RugComplex::with_val(precision, self.real.to_f64(), self.imag.to_f64())
-    }
-    
-    /// Create from RugComplex
-    pub fn from_rug_complex(z: &RugComplex) -> Self {
-        LargeComplex::new(
-            LargeNumber::new_standard(z.real().to_f64()),
-            LargeNumber::new_standard(z.imag().to_f64()),
-        )
-    }
-}
-
-// Helper implementations for SpecialValue
-impl SpecialValue {
-    pub fn is_finite(&self) -> bool {
-        !matches!(self, SpecialValue::Infinity | SpecialValue::NegInfinity | SpecialValue::NaN)
-    }
-    
-    pub fn to_f64(&self) -> f64 {
-        match self {
-            SpecialValue::Infinity => f64::INFINITY,
-            SpecialValue::NegInfinity => f64::NEG_INFINITY,
-            SpecialValue::NaN => f64::NAN,
-            SpecialValue::Zero => 0.0,
-        }
-    }
-}
-
-
-// Add the large number system at the end of the file
-use rug::{Complex as RugComplex, Float as RugFloat};
-
-/// Efficient representation for very large numbers using scientific notation: significand * base^exponent
-/// For example: Googolplex = 1 * 10^(10^100) would be represented as LargeNumber { significand: 1.0, base: 10.0, exponent: LargeNumber { significand: 1.0, base: 10.0, exponent: LargeNumber { significand: 100.0, base: 10.0, exponent: LargeNumber::zero() } } }
-#[derive(Debug, Clone, PartialEq)]
-pub enum LargeNumber {
-    /// Standard floating point number for small values
-    Standard(f64),
-    /// Scientific notation: significand * base^exponent
-    Scientific { significand: f64, base: f64, exponent: Box<LargeNumber> },
-    /// Special values: infinity, NaN, zero
-    Special(SpecialValue),
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum SpecialValue {
-    Infinity,
-    NegInfinity,
-    NaN,
-    Zero,
-}
-
-impl LargeNumber {
-    pub fn new_standard(value: f64) -> Self {
-        LargeNumber::new_standard(value)
-    }
-    
-    pub fn new_scientific(significand: f64, base: f64, exponent: LargeNumber) -> Self {
-        LargeNumber::new_scientific {
-            significand,
-            base,
-            exponent: Box::new(exponent),
-        }
-    }
-    
-    pub fn zero() -> Self {
-        LargeNumber::Special(SpecialValue::Zero)
-    }
-    
-    pub fn infinity() -> Self {
-        LargeNumber::Special(SpecialValue::Infinity)
-    }
-    
-    pub fn neg_infinity() -> Self {
-        LargeNumber::Special(SpecialValue::NegInfinity)
-    }
-    
-    pub fn nan() -> Self {
-        LargeNumber::Special(SpecialValue::NaN)
-    }
-    
-    /// Create a googol (10^100)
-    pub fn googol() -> Self {
-        LargeNumber::new_scientific(1.0, 10.0, LargeNumber::new_standard(100.0))
-    }
-    
-    /// Create a googolplex (10^googol)
-    pub fn googolplex() -> Self {
-        LargeNumber::new_scientific(1.0, 10.0, LargeNumber::googol())
-    }
-    
-    /// Convert to f64 if possible, otherwise return infinity
-    pub fn to_f64(&self) -> f64 {
-        match self {
-            LargeNumber::new_standard(val) => *val,
-            LargeNumber::new_scientific { significand, base, exponent } => {
-                let exp_val = exponent.to_f64();
-                if exp_val > 300.0 {
-                    // Would overflow, return infinity
-                    f64::INFINITY
-                } else {
-                    significand * base.powf(exp_val)
-                }
-            },
-            LargeNumber::Special(special) => match special {
-                SpecialValue::Infinity => f64::INFINITY,
-                SpecialValue::NegInfinity => f64::NEG_INFINITY,
-                SpecialValue::NaN => f64::NAN,
-                SpecialValue::Zero => 0.0,
-            },
-        }
-    }
-    
-    /// Get the magnitude (absolute value) of the number
-    pub fn abs(&self) -> Self {
-        match self {
-            LargeNumber::new_standard(val) => LargeNumber::new_standard(val.abs()),
-            LargeNumber::new_scientific { significand, base, exponent } => {
-                LargeNumber::new_scientific {
-                    significand: significand.abs(),
-                    base: *base,
-                    exponent: exponent.clone(),
-                }
-            },
-            LargeNumber::Special(special) => match special {
-                SpecialValue::NegInfinity => LargeNumber::Special(SpecialValue::Infinity),
-                _ => self.clone(),
-            },
-        }
-    }
-    
-    /// Check if the number is finite
-    pub fn is_finite(&self) -> bool {
-        match self {
-            LargeNumber::new_standard(val) => val.is_finite(),
-            LargeNumber::new_scientific { .. } => true, // Scientific notation represents finite values
-            LargeNumber::Special(special) => match special {
-                SpecialValue::Infinity | SpecialValue::NegInfinity | SpecialValue::NaN => false,
-                SpecialValue::Zero => true,
-            },
-        }
-    }
-    
-    /// Check if the number is infinite
-    pub fn is_infinite(&self) -> bool {
-        match self {
-            LargeNumber::Special(special) => matches!(special, SpecialValue::Infinity | SpecialValue::NegInfinity),
-            _ => false,
-        }
-    }
-    
-    /// Add two large numbers
-    pub fn add(&self, other: &Self) -> Self {
-        match (self, other) {
-            (LargeNumber::new_standard(a), LargeNumber::new_standard(b)) => {
-                let result = a + b;
-                if result.is_infinite() {
-                    if result.is_sign_positive() {
-                        LargeNumber::infinity()
-                    } else {
-                        LargeNumber::neg_infinity()
-                    }
-                } else {
-                    LargeNumber::new_standard(result)
-                }
-            },
-            (LargeNumber::Special(s1), LargeNumber::Special(s2)) => {
-                match (s1, s2) {
-                    (SpecialValue::Infinity, SpecialValue::NegInfinity) |
-                    (SpecialValue::NegInfinity, SpecialValue::Infinity) => LargeNumber::nan(),
-                    (SpecialValue::Infinity, _) | (_, SpecialValue::Infinity) => LargeNumber::infinity(),
-                    (SpecialValue::NegInfinity, _) | (_, SpecialValue::NegInfinity) => LargeNumber::neg_infinity(),
-                    (SpecialValue::NaN, _) | (_, SpecialValue::NaN) => LargeNumber::nan(),
-                    (SpecialValue::Zero, _) => other.clone(),
-                    (_, SpecialValue::Zero) => self.clone(),
-                }
-            },
-            (LargeNumber::Special(s), _) | (_, LargeNumber::Special(s)) => {
-                match s {
-                    SpecialValue::Infinity | SpecialValue::NegInfinity | SpecialValue::NaN => self.clone(),
-                    SpecialValue::Zero => other.clone(),
-                }
-            },
-            _ => {
-                // For mixed representations, convert to f64 if possible
-                let a = self.to_f64();
-                let b = other.to_f64();
-                let result = a + b;
-                if result.is_finite() {
-                    LargeNumber::new_standard(result)
-                } else if result.is_infinite() && result.is_sign_positive() {
-                    LargeNumber::infinity()
-                } else if result.is_infinite() && result.is_sign_negative() {
-                    LargeNumber::neg_infinity()
-                } else {
-                    LargeNumber::nan()
-                }
-            }
-        }
-    }
-    
-    /// Multiply two large numbers
-    pub fn multiply(&self, other: &Self) -> Self {
-        match (self, other) {
-            (LargeNumber::new_standard(a), LargeNumber::new_standard(b)) => {
-                let result = a * b;
-                if result.is_infinite() {
-                    if result.is_sign_positive() {
-                        LargeNumber::infinity()
-                    } else {
-                        LargeNumber::neg_infinity()
-                    }
-                } else if result.is_nan() {
-                    LargeNumber::nan()
-                } else {
-                    LargeNumber::new_standard(result)
-                }
-            },
-            (LargeNumber::new_scientific { significand: s1, base: b1, exponent: e1 }, 
-             LargeNumber::new_scientific { significand: s2, base: b2, exponent: e2 }) if (b1 - b2).abs() < 1e-10 => {
-                // Same base: multiply significands and add exponents
-                let new_significand = s1 * s2;
-                let new_exponent = e1.add(e2);
-                LargeNumber::new_scientific {
-                    significand: new_significand,
-                    base: *b1,
-                    exponent: Box::new(new_exponent),
-                }
-            },
-            (LargeNumber::Special(s1), LargeNumber::Special(s2)) => {
-                match (s1, s2) {
-                    (SpecialValue::Zero, SpecialValue::Infinity) |
-                    (SpecialValue::Infinity, SpecialValue::Zero) |
-                    (SpecialValue::Zero, SpecialValue::NegInfinity) |
-                    (SpecialValue::NegInfinity, SpecialValue::Zero) => LargeNumber::nan(),
-                    (SpecialValue::Zero, _) | (_, SpecialValue::Zero) => LargeNumber::zero(),
-                    (SpecialValue::Infinity, SpecialValue::Infinity) |
-                    (SpecialValue::NegInfinity, SpecialValue::NegInfinity) => LargeNumber::infinity(),
-                    (SpecialValue::Infinity, SpecialValue::NegInfinity) |
-                    (SpecialValue::NegInfinity, SpecialValue::Infinity) => LargeNumber::neg_infinity(),
-                    (SpecialValue::Infinity, _) | (_, SpecialValue::Infinity) => LargeNumber::infinity(),
-                    (SpecialValue::NegInfinity, _) | (_, SpecialValue::NegInfinity) => LargeNumber::neg_infinity(),
-                    (SpecialValue::NaN, _) | (_, SpecialValue::NaN) => LargeNumber::nan(),
-                }
-            },
-            (LargeNumber::Special(s), _) | (_, LargeNumber::Special(s)) => {
-                match s {
-                    SpecialValue::Zero => LargeNumber::zero(),
-                    SpecialValue::Infinity | SpecialValue::NegInfinity => self.clone(),
-                    SpecialValue::NaN => LargeNumber::nan(),
-                }
-            },
-            _ => {
-                // For mixed representations, convert to f64 if possible
-                let a = self.to_f64();
-                let b = other.to_f64();
-                let result = a * b;
-                if result.is_finite() {
-                    LargeNumber::new_standard(result)
-                } else if result.is_infinite() && result.is_sign_positive() {
-                    LargeNumber::infinity()
-                } else if result.is_infinite() && result.is_sign_negative() {
-                    LargeNumber::neg_infinity()
-                } else {
-                    LargeNumber::nan()
-                }
-            }
-        }
-    }
-    
-    /// Raise a large number to a power
-    pub fn pow(&self, exponent: &Self) -> Self {
-        match (self, exponent) {
-            (LargeNumber::new_standard(base_val), LargeNumber::new_standard(exp_val)) => {
-                let result = base_val.powf(*exp_val);
-                if result.is_finite() {
-                    LargeNumber::new_standard(result)
-                } else if result.is_infinite() && result.is_sign_positive() {
-                    LargeNumber::infinity()
-                } else if result.is_infinite() && result.is_sign_negative() {
-                    LargeNumber::neg_infinity()
-                } else {
-                    LargeNumber::nan()
-                }
-            },
-            (LargeNumber::new_scientific { significand: s, base: b, exponent: e }, LargeNumber::new_standard(exp_val)) => {
-                // (s * b^e)^exp_val = s^exp_val * b^(e*exp_val)
-                let new_significand = s.powf(*exp_val);
-                let new_exponent = e.multiply(&LargeNumber::new_standard(*exp_val));
-                LargeNumber::new_scientific {
-                    significand: new_significand,
-                    base: *b,
-                    exponent: Box::new(new_exponent),
-                }
-            },
-            (LargeNumber::Special(s1), LargeNumber::Special(s2)) => {
-                match (s1, s2) {
-                    (SpecialValue::Zero, SpecialValue::Infinity) => LargeNumber::nan(), // 0^inf
-                    (SpecialValue::Zero, SpecialValue::NegInfinity) => LargeNumber::infinity(), // 0^(-inf)
-                    (SpecialValue::Zero, _) if s2.is_finite() => LargeNumber::zero(), // 0^finite = 0
-                    (SpecialValue::One, SpecialValue::Infinity) | (SpecialValue::One, SpecialValue::NegInfinity) => LargeNumber::new_standard(1.0), // 1^inf = 1
-                    (SpecialValue::Infinity, SpecialValue::Zero) => LargeNumber::new_standard(1.0), // inf^0 = 1
-                    (SpecialValue::Infinity, _) if s2.is_finite() && s2.to_f64() > 0.0 => LargeNumber::infinity(), // inf^positive = inf
-                    (SpecialValue::Infinity, _) if s2.is_finite() && s2.to_f64() < 0.0 => LargeNumber::zero(), // inf^negative = 0
-                    (SpecialValue::NegInfinity, _) if s2.is_finite() && s2.to_f64() > 0.0 => {
-                        // (-inf)^positive depends on if positive is even or odd, but we'll simplify
-                        if s2.to_f64().floor() == s2.to_f64() && (s2.to_f64() as i64) % 2 == 0 {
-                            LargeNumber::infinity() // even power
-                        } else {
-                            LargeNumber::neg_infinity() // odd power
-                        }
-                    },
-                    (SpecialValue::NaN, _) | (_, SpecialValue::NaN) => LargeNumber::nan(),
-                    _ => LargeNumber::infinity(), // Default to infinity for complex cases
-                }
-            },
-            (LargeNumber::Special(s), _) => {
-                match s {
-                    SpecialValue::Zero => LargeNumber::zero(),
-                    SpecialValue::Infinity => LargeNumber::infinity(),
-                    SpecialValue::NegInfinity => LargeNumber::neg_infinity(),
-                    SpecialValue::NaN => LargeNumber::nan(),
-                }
-            },
-            (_, LargeNumber::Special(s)) => {
-                match s {
-                    SpecialValue::Zero => LargeNumber::new_standard(1.0), // anything^0 = 1
-                    SpecialValue::Infinity => LargeNumber::infinity(), // anything^inf = inf (for positive base)
-                    SpecialValue::NegInfinity => LargeNumber::zero(), // anything^(-inf) = 0 (for base > 1)
-                    SpecialValue::NaN => LargeNumber::nan(),
-                }
-            },
-            _ => {
-                // For other combinations, convert to f64 if reasonable
-                let base_val = self.to_f64();
-                let exp_val = exponent.to_f64();
-                let result = base_val.powf(exp_val);
-                if result.is_finite() {
-                    LargeNumber::new_standard(result)
-                } else if result.is_infinite() && result.is_sign_positive() {
-                    LargeNumber::infinity()
-                } else if result.is_infinite() && result.is_sign_negative() {
-                    LargeNumber::neg_infinity()
-                } else {
-                    LargeNumber::nan()
-                }
-            }
-        }
-    }
-    
-    /// Get the norm (magnitude) of the number
-    pub fn norm(&self) -> f64 {
-        match self {
-            LargeNumber::new_standard(val) => val.abs(),
-            LargeNumber::new_scientific { significand, base, exponent } => {
+            LargeNumber::Scientific { significand, base, exponent } => {
                 let exp_val = exponent.to_f64();
                 if exp_val > 300.0 {
                     f64::INFINITY
