@@ -1,85 +1,107 @@
-use num_complex::Complex;
+use std::time::Instant;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
-/// Utility functions for fractal generation
-pub mod utils {
-    use super::*;
+/// Utility functions for the fractal toolkit
+pub struct Utils;
 
-    /// Convert pixel coordinates to complex plane coordinates
-    pub fn pixel_to_complex(x: u32, y: u32, width: u32, height: u32, bounds: [f64; 4]) -> Complex<f64> {
-        let [x_min, x_max, y_min, y_max] = bounds;
-        
-        let real = x_min + (x as f64 / width as f64) * (x_max - x_min);
-        let imag = y_min + (y as f64 / height as f64) * (y_max - y_min);
-        
-        Complex::new(real, imag)
+impl Utils {
+    /// Measure execution time of a function
+    pub fn measure_time<T>(f: impl FnOnce() -> T) -> (T, std::time::Duration) {
+        let start = Instant::now();
+        let result = f();
+        let duration = start.elapsed();
+        (result, duration)
     }
 
-    /// Parse a complex number from a string representation
-    /// Supports formats like: "1", "i", "-i", "2i", "1+2i", "1-2i", etc.
-    pub fn parse_complex_number(s: &str) -> Result<Complex<f64>, String> {
-        let s = s.trim();
-        
-        // Handle special cases
-        if s == "i" {
-            return Ok(Complex::new(0.0, 1.0));
-        } else if s == "-i" {
-            return Ok(Complex::new(0.0, -1.0));
+    /// Clamp a value between min and max
+    pub fn clamp<T: PartialOrd>(value: T, min: T, max: T) -> T 
+    where T: Copy 
+    {
+        if value < min { min } 
+        else if value > max { max } 
+        else { value }
+    }
+
+    /// Linear interpolation between two values
+    pub fn lerp(start: f64, end: f64, t: f64) -> f64 {
+        start + t * (end - start)
+    }
+
+    /// Map a value from one range to another
+    pub fn map_range(value: f64, from_start: f64, from_end: f64, to_start: f64, to_end: f64) -> f64 {
+        let t = (value - from_start) / (from_end - from_start);
+        Self::lerp(to_start, to_end, t)
+    }
+
+    /// Check if a number is approximately equal to another
+    pub fn approx_equal(a: f64, b: f64, epsilon: f64) -> bool {
+        (a - b).abs() < epsilon
+    }
+}
+
+/// Thread-safe counter for tracking progress
+pub struct Counter {
+    value: AtomicUsize,
+}
+
+impl Counter {
+    /// Create a new counter with initial value 0
+    pub fn new() -> Self {
+        Self {
+            value: AtomicUsize::new(0),
         }
-        
-        // Handle pure real numbers
-        if let Ok(real_val) = s.parse::<f64>() {
-            return Ok(Complex::new(real_val, 0.0));
+    }
+
+    /// Increment the counter and return the new value
+    pub fn inc(&self) -> usize {
+        self.value.fetch_add(1, Ordering::SeqCst) + 1
+    }
+
+    /// Get the current value of the counter
+    pub fn get(&self) -> usize {
+        self.value.load(Ordering::SeqCst)
+    }
+
+    /// Reset the counter to 0
+    pub fn reset(&self) {
+        self.value.store(0, Ordering::SeqCst);
+    }
+}
+
+impl Default for Counter {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// Progress tracker for long-running operations
+pub struct ProgressTracker {
+    total: usize,
+    current: Counter,
+}
+
+impl ProgressTracker {
+    /// Create a new progress tracker
+    pub fn new(total: usize) -> Self {
+        Self {
+            total,
+            current: Counter::new(),
         }
-        
-        // Handle pure imaginary numbers like "2i", "-3i", etc.
-        if s.ends_with('i') || s.ends_with('I') {
-            let coeff_str = &s[..s.len()-1]; // Remove the 'i'
-            if let Ok(coeff) = coeff_str.parse::<f64>() {
-                return Ok(Complex::new(0.0, coeff));
-            }
-        }
-        
-        // Handle complex numbers in the form "a+bi", "a-bi", etc.
-        // This is a simplified parser - a full implementation would be more complex
-        // For now, we'll handle the most common cases
-        
-        // Look for + or - that's not at the beginning (indicating the real/imaginary separator)
-        let mut plus_minus_pos = None;
-        for (i, c) in s.char_indices() {
-            if (c == '+' || c == '-') && i > 0 {
-                plus_minus_pos = Some(i);
-                break;
-            }
-        }
-        
-        if let Some(pos) = plus_minus_pos {
-            let real_part = &s[..pos];
-            let imag_part = &s[pos..];
-            
-            // Remove the 'i' from the imaginary part if present
-            let imag_part_clean = if imag_part.ends_with('i') || imag_part.ends_with('I') {
-                &imag_part[..imag_part.len()-1]
-            } else {
-                imag_part
-            };
-            
-            let real_val = if real_part.is_empty() {
-                0.0
-            } else {
-                real_part.parse::<f64>().map_err(|_| format!("Invalid real part: {}", real_part))?
-            };
-            
-            let imag_val = if imag_part_clean.is_empty() || imag_part_clean == "+" {
-                1.0
-            } else if imag_part_clean == "-" {
-                -1.0
-            } else {
-                imag_part_clean.parse::<f64>().map_err(|_| format!("Invalid imaginary part: {}", imag_part_clean))?
-            };
-            
-            return Ok(Complex::new(real_val, imag_val));
-        }
-        
-        Err(format!("Unable to parse complex number: {}", s))
+    }
+
+    /// Increment progress and return percentage
+    pub fn inc(&self) -> f64 {
+        let current = self.current.inc();
+        (current as f64 / self.total as f64) * 100.0
+    }
+
+    /// Get current progress as percentage
+    pub fn progress(&self) -> f64 {
+        (self.current.get() as f64 / self.total as f64) * 100.0
+    }
+
+    /// Check if the operation is complete
+    pub fn is_complete(&self) -> bool {
+        self.current.get() >= self.total
     }
 }
